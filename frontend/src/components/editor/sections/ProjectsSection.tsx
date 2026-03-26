@@ -2,36 +2,11 @@ import { Box, TextField, Typography, Button, IconButton } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, DragIndicator as DragIcon } from '@mui/icons-material';
 import type { ProjectEntry } from '../../../types';
 import { nanoid } from '../../../utils/nanoid';
+import BulletList from './BulletList';
 
 interface Props {
   data: ProjectEntry[];
   onChange: (data: ProjectEntry[]) => void;
-}
-
-function BulletList({ bullets, onChange }: { bullets: string[]; onChange: (b: string[]) => void }) {
-  return (
-    <Box sx={{ mt: 1.5 }}>
-      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.65rem' }}>
-        Bullet Points
-      </Typography>
-      {bullets.map((b, i) => (
-        <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, mt: 0.75 }}>
-          <Box sx={{ mt: 1, color: '#aaa', fontSize: 18, flexShrink: 0 }}>•</Box>
-          <TextField
-            fullWidth size="small" multiline value={b} placeholder="Describe what you built or accomplished..."
-            onChange={(e) => { const arr = [...bullets]; arr[i] = e.target.value; onChange(arr); }}
-            sx={{ '& .MuiOutlinedInput-root': { bgcolor: '#fafafa', fontSize: '0.85rem' } }}
-          />
-          <IconButton size="small" onClick={() => onChange(bullets.filter((_, j) => j !== i))} sx={{ color: 'text.disabled', flexShrink: 0, mt: 0.5 }}>
-            <DeleteIcon fontSize="small" />
-          </IconButton>
-        </Box>
-      ))}
-      <Button size="small" startIcon={<AddIcon />} onClick={() => onChange([...bullets, ''])} sx={{ mt: 0.75, fontSize: '0.78rem', color: 'text.secondary' }}>
-        Add bullet
-      </Button>
-    </Box>
-  );
 }
 
 function EntryCard({ entry, onChange, onDelete }: { entry: ProjectEntry; onChange: (e: ProjectEntry) => void; onDelete: () => void }) {
@@ -73,7 +48,12 @@ function EntryCard({ entry, onChange, onDelete }: { entry: ProjectEntry; onChang
         ))}
       </Box>
 
-      <BulletList bullets={entry.bullets} onChange={(b) => set('bullets')(b)} />
+      <BulletList
+        bullets={entry.bullets}
+        context={entry.name || 'project'}
+        placeholder="Describe what you built or accomplished..."
+        onChange={(b) => set('bullets')(b)}
+      />
     </Box>
   );
 }

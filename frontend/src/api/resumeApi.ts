@@ -27,15 +27,27 @@ export async function sendChatMessage(
   message: string,
   history: { role: string; content: string }[],
   resumeText: string,
+  latexBody: string,
 ) {
   const fd = new FormData();
   fd.append('message', message);
   fd.append('history', JSON.stringify(history));
   fd.append('resumeText', resumeText);
+  fd.append('latexBody', latexBody);
   const res = await fetch('/api/chat', { method: 'POST', body: fd });
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || 'Chat failed');
-  return data as { content: string };
+  return data as { content: string; latexBody: string | null };
+}
+
+export async function improveBullet(bullet: string, context: string) {
+  const fd = new FormData();
+  fd.append('bullet', bullet);
+  fd.append('context', context);
+  const res = await fetch('/api/improve-bullet', { method: 'POST', body: fd });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to improve bullet');
+  return data as { improved: string };
 }
 
 export async function applyChanges(resumeText: string, analysis: string) {

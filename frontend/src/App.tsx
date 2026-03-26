@@ -4,6 +4,7 @@ import { theme } from './theme';
 import { type View, type ResumeData } from './types';
 import { analyzeResume } from './api/resumeApi';
 import { nanoid } from './utils/nanoid';
+import { parseLatexBody } from './utils/latexParser';
 import UploadPage from './pages/UploadPage';
 import EditorPage from './pages/EditorPage';
 
@@ -35,6 +36,7 @@ export default function App() {
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [resumeText, setResumeText] = useState('');
   const [analysis, setAnalysis] = useState('');
+  const [initialLatexBody, setInitialLatexBody] = useState<string | null>(null);
 
   const handleFileChange = useCallback((file: File | null) => {
     if (file && file.type !== 'application/pdf') {
@@ -59,6 +61,7 @@ export default function App() {
       const data = await analyzeResume(resumeFile, jobDescription);
       setAnalysis(data.analysis ?? '');
       setResumeText(data.resumeText ?? '');
+      setInitialLatexBody(data.latexBody ?? null);
       setResumeData(normalizeResumeData(data.resumeData ?? {} as ResumeData));
       setView('editor');
     } catch (err: unknown) {
@@ -68,6 +71,22 @@ export default function App() {
     }
   };
 
+  const handlePasteLatex = useCallback((latexBody: string) => {
+    // Extract body if full document was pasted
+    const bodyMatch = latexBody.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
+    const body = bodyMatch ? `\\begin{document}${bodyMatch[1]}\\end{document}` : latexBody;
+    try {
+      const parsed = parseLatexBody(body);
+      setResumeData(normalizeResumeData(parsed));
+    } catch {
+      setResumeData(normalizeResumeData({} as ResumeData));
+    }
+    setInitialLatexBody(body);
+    setResumeText('');
+    setAnalysis('');
+    setView('editor');
+  }, []);
+
   const handleReset = useCallback(() => {
     setView('upload');
     setResumeFile(null);
@@ -75,6 +94,7 @@ export default function App() {
     setResumeData(null);
     setResumeText('');
     setAnalysis('');
+    setInitialLatexBody(null);
     setError('');
   }, []);
 
@@ -94,12 +114,14 @@ export default function App() {
           onDragLeave={() => setIsDragOver(false)}
           onJobDescriptionChange={setJobDescription}
           onAnalyze={handleAnalyze}
+          onPasteLatex={handlePasteLatex}
         />
       ) : resumeData ? (
         <EditorPage
           resumeData={resumeData}
           resumeText={resumeText}
           analysis={analysis}
+          initialLatexBody={initialLatexBody ?? undefined}
           onReset={handleReset}
         />
       ) : null}

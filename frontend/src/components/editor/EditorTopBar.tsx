@@ -8,19 +8,26 @@ import {
   GridView as LayoutIcon,
   CheckCircle as CheckIcon,
   WarningAmber as WarnIcon,
+  AutoAwesome as ApplyIcon,
 } from '@mui/icons-material';
 
 interface Props {
   activeTab: number;
   pageCount: number;
   downloading: boolean;
+  applying: boolean;
+  hasAnalysis: boolean;
   error: string;
   onReset: () => void;
   onTabChange: (tab: number) => void;
   onDownload: () => void;
+  onApplyChanges: () => void;
 }
 
-export default function EditorTopBar({ activeTab, pageCount, downloading, error, onReset, onTabChange, onDownload }: Props) {
+export default function EditorTopBar({
+  activeTab, pageCount, downloading, applying, hasAnalysis, error,
+  onReset, onTabChange, onDownload, onApplyChanges,
+}: Props) {
   return (
     <Box sx={{
       flexShrink: 0,
@@ -71,9 +78,30 @@ export default function EditorTopBar({ activeTab, pageCount, downloading, error,
         />
       )}
 
+      {hasAnalysis && (
+        <Tooltip title="Re-generate resume applying all AI suggestions (enforces 1 page)">
+          <span>
+            <Button
+              size="small" variant="outlined"
+              onClick={onApplyChanges}
+              disabled={applying || downloading}
+              startIcon={applying ? <CircularProgress size={12} color="inherit" /> : <ApplyIcon sx={{ fontSize: '14px !important' }} />}
+              sx={{
+                px: 1.5, height: 32, fontSize: '0.78rem', borderRadius: 1.5,
+                textTransform: 'none', fontWeight: 600,
+                borderColor: '#4f46e5', color: '#4f46e5',
+                '&:hover': { bgcolor: '#eef2ff', borderColor: '#4338ca' },
+              }}
+            >
+              {applying ? 'Applying…' : 'Apply Changes'}
+            </Button>
+          </span>
+        </Tooltip>
+      )}
+
       <Button
         size="small" variant="contained"
-        onClick={onDownload} disabled={downloading}
+        onClick={onDownload} disabled={downloading || applying}
         startIcon={downloading ? <CircularProgress size={13} color="inherit" /> : <DownloadIcon sx={{ fontSize: '15px !important' }} />}
         sx={{
           px: 2, height: 32, fontSize: '0.8rem', borderRadius: 1.5, textTransform: 'none',

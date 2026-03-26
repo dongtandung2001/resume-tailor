@@ -122,11 +122,11 @@ RESUME_BODY_EXAMPLE = r"""
       {Bachelor of Arts in Computer Science, Minor in Business}{Aug. 2018 -- May 2021}
   \resumeSubHeadingListEnd
 
-\section{Experience}
+\section{Professional Experience}
   \resumeSubHeadingListStart
     \resumeSubheading
-      {Undergraduate Research Assistant}{June 2020 -- Present}
-      {Texas A\&M University}{College Station, TX}
+      {Texas A\&M University}{June 2020 -- Present}
+      {Undergraduate Research Assistant}{College Station, TX}
       \resumeItemListStart
         \resumeItem{Developed a REST API using FastAPI and PostgreSQL to store data from learning management systems}
         \resumeItem{Developed a full-stack web application using Flask, React, PostgreSQL and Docker}
@@ -214,6 +214,155 @@ def try_compile_latex(latex_source: str) -> tuple[bytes | None, int, str | None]
         return pdf_bytes, page_count, None
 
 
+def analyze_resume_standalone(resume_text: str) -> str:
+    """Stage 1A — profile the resume independently, no JD context."""
+    response = deepseek.chat.completions.create(
+        model="deepseek-reasoner",
+        max_tokens=2048,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert technical recruiter performing a standalone resume audit. "
+                    "Analyze this resume independently, without any job description context. "
+                    "Be exhaustive and specific."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"RESUME TEXT:\n\n{resume_text}\n\n"
+                    "Produce a structured resume profile with EXACTLY these sections:\n\n"
+                    "## Candidate Profile\n"
+                    "Inferred role/seniority level and core technical identity (primary languages, frameworks, domain).\n\n"
+                    "## Explicit Skills Inventory\n"
+                    "Every technical skill, tool, framework, language, and platform mentioned. "
+                    "Group by category: Languages | Frameworks | Cloud/Infra | Databases | Other\n\n"
+                    "## Implicit/Inferable Skills\n"
+                    "Skills strongly implied by the described work but not explicitly stated "
+                    "(e.g. if they built a REST API in Go, imply 'HTTP/REST API design').\n\n"
+                    "## Experience Quality Assessment\n"
+                    "For each experience entry, score bullet quality 1–5 on: "
+                    "action verb strength, metric/quantification presence, technical specificity. "
+                    "Identify the 3 weakest bullets verbatim.\n\n"
+                    "## Structural Completeness\n"
+                    "Check for each section (✓/✗): Contact info, Summary, Education, Experience, "
+                    "Projects, Skills section, Dates on all entries.\n\n"
+                    "## ATS Formatting Signals\n"
+                    "Flag any ATS-hostile patterns: non-standard section names, dense skill blocks, "
+                    "inconsistent date formats, missing keywords in section headers.\n\n"
+                    "## Standalone Baseline Score\n"
+                    "Score 1–100 purely on resume quality, ignoring any specific job. "
+                    "Explain in 2 sentences."
+                ),
+            },
+        ],
+    )
+    return response.choices[0].message.content or ""
+
+
+def analyze_jd_standalone(job_description: str) -> str:
+    """Stage 1B — decompose the job description into a structured intelligence profile."""
+    response = deepseek.chat.completions.create(
+        model="deepseek-chat",
+        max_tokens=1024,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert technical recruiter. Parse this job description into a structured "
+                    "intelligence report. Be exhaustive — extract every keyword, skill, and signal."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"JOB DESCRIPTION:\n\n{job_description}\n\n"
+                    "Produce a structured JD profile with EXACTLY these sections:\n\n"
+                    "## Role Classification\n"
+                    "Title, seniority level, primary domain.\n\n"
+                    "## Hard Requirements\n"
+                    "Every non-negotiable technical requirement — languages, frameworks, tools, "
+                    "degree requirements. Use exact phrasing from the JD.\n\n"
+                    "## Preferred Qualifications\n"
+                    "Every 'preferred', 'bonus', or 'nice-to-have' item.\n\n"
+                    "## ATS Keyword Master List\n"
+                    "ALL technical terms, tools, frameworks, buzzwords, and domain-specific vocabulary "
+                    "an ATS would scan for. Comma-separated, exhaustive — include every technical term.\n\n"
+                    "## Responsibilities Summary\n"
+                    "3–5 bullets summarising the actual day-to-day work.\n\n"
+                    "## Implicit Expectations\n"
+                    "Skills strongly implied but not explicitly stated.\n\n"
+                    "## Seniority Signals\n"
+                    "Phrases signalling expected ownership, scope, or leadership.\n\n"
+                    "## Culture/Soft Skill Signals\n"
+                    "Collaboration, communication, and cross-functional expectations."
+                ),
+            },
+        ],
+    )
+    return response.choices[0].message.content or ""
+
+
+def synthesize_ats_analysis(resume_profile: str, jd_profile: str, resume_text: str) -> str:
+    """Stage 2A — deep gap synthesis using pre-analyzed profiles."""
+    response = deepseek.chat.completions.create(
+        model="deepseek-reasoner",
+        max_tokens=4096,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert ATS specialist and career coach performing a cross-document gap analysis. "
+                    "You have been given pre-analyzed profiles of both a resume and a job description. "
+                    "Use the profiles as your primary source — reference the raw resume text only for exact quoting."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"RESUME PROFILE (pre-analyzed):\n{resume_profile}\n\n"
+                    "---\n\n"
+                    f"JOB DESCRIPTION PROFILE (pre-analyzed):\n{jd_profile}\n\n"
+                    "---\n\n"
+                    f"RAW RESUME TEXT (for exact quoting only):\n{resume_text}\n\n"
+                    "---\n\n"
+                    "Using the profiles above, produce the following ATS analysis:\n\n"
+                    "## ATS Compatibility Score\n"
+                    "Score 1–100. Ground the score in arithmetic: start from the Standalone Baseline Score "
+                    "in the Resume Profile, adjust for keyword coverage (matched / total ATS keywords from JD Profile), "
+                    "and apply penalties for structural issues. Show your working: "
+                    "e.g. 'Baseline 72 → keyword coverage 8/15 (53%) → -8 pts → structural penalties -5 → final 59'.\n\n"
+                    "## Keyword Match Analysis\n"
+                    "Use the ATS Keyword Master List from the JD Profile. For EACH keyword, check against "
+                    "the Explicit Skills Inventory and Implicit Skills from the Resume Profile:\n"
+                    "- ✅ Present — quote exact location from raw resume text\n"
+                    "- ❌ Missing — must add\n"
+                    "- ⚠️ Partial — implied but not ATS-parseable\n\n"
+                    "## Skills Gap\n"
+                    "From Hard Requirements and Preferred Qualifications in the JD Profile, list what is "
+                    "absent or weak. Split into:\n"
+                    "- Critical gaps (hard requirements not met)\n"
+                    "- Improvement areas (preferred qualifications missing)\n\n"
+                    "## Strengths\n"
+                    "What aligns well between the candidate and this specific role. Be concise.\n\n"
+                    "## Bullet Point Rewrites\n"
+                    "Use the 3 weakest bullets from the Resume Profile's Experience Quality Assessment. "
+                    "Rewrite each using: Action Verb + Task + Measurable Result. "
+                    "Where natural, incorporate missing ATS keywords from the JD.\n\n"
+                    "## Section & Format Recommendations\n"
+                    "Use Structural Completeness and ATS Formatting Signals from the Resume Profile. "
+                    "Add JD-specific section recommendations where relevant.\n\n"
+                    "## Priority Action List\n"
+                    "Numbered list of the top 5 highest-impact changes, ordered by combined impact on "
+                    "ATS score and recruiter impression. Cross-reference keyword gaps and bullet quality findings."
+                ),
+            },
+        ],
+    )
+    return response.choices[0].message.content or ""
+
+
 def extract_structured_data(resume_text: str) -> dict:
     """Extract structured resume data as JSON using LLM."""
     response = deepseek.chat.completions.create(
@@ -261,12 +410,25 @@ def extract_structured_data(resume_text: str) -> dict:
 
 def generate_latex_body(resume_text: str, improvements: str | None = None) -> str:
     """Convert resume text to Jake Gutierrez template body, optionally applying improvements."""
-    task = (
-        f"Original resume:\n\n{resume_text}\n\n"
-        f"Improvements to apply:\n\n{improvements}"
-        if improvements
-        else f"Convert this resume to the template format:\n\n{resume_text}"
-    )
+    if improvements:
+        task = (
+            f"Original resume:\n\n{resume_text}\n\n"
+            f"---\n\nATS Analysis & Recommended Improvements:\n\n{improvements}"
+        )
+        improvement_rules = (
+            "6. Apply the highest-impact improvements from the analysis above — "
+            "especially missing keywords, stronger bullet rewrites, and skills gaps.\n"
+            "7. STRICT 1-PAGE LIMIT: You must fit everything in 1 page. "
+            "Because you are adding new content (keywords, rewritten bullets), "
+            "you must simultaneously tighten existing bullets to make room. "
+            "Never add a new line without removing or shortening another. "
+            "Do NOT add a Summary/Profile section — there is no space for it. "
+            "Prioritise the highest-impact keyword and bullet changes; skip low-impact suggestions if space is tight.\n"
+        )
+    else:
+        task = f"Convert this resume to the template format:\n\n{resume_text}"
+        improvement_rules = ""
+
     response = deepseek.chat.completions.create(
         model="deepseek-chat",
         max_tokens=4096,
@@ -287,10 +449,11 @@ def generate_latex_body(resume_text: str, improvements: str | None = None) -> st
                     f"{task}\n\n"
                     "Rules:\n"
                     "1. Use ONLY commands from the example above — no \\faPhone, no \\hspace, nothing else.\n"
-                    "2. Target strictly 1 page — keep each bullet to one concise line.\n"
+                    "2. Strictly 1 page — every bullet must be one tight line.\n"
                     "3. Preserve all facts (dates, companies, technologies, metrics).\n"
                     "4. Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
-                    "5. Output ONLY \\begin{document} ... \\end{document}."
+                    "5. Output ONLY \\begin{document} ... \\end{document}.\n"
+                    f"{improvement_rules}"
                 ),
             },
         ],
@@ -324,41 +487,26 @@ async def analyze_resume(
     if not resume_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract text from the PDF.")
 
-    print(f"[1/3] Extracted {len(resume_text)} chars")
+    print(f"[stage0] Extracted {len(resume_text)} chars")
 
-    print("[2/3] Analyzing resume with DeepSeek...")
-    analysis_response = deepseek.chat.completions.create(
-        model="deepseek-chat",
-        max_tokens=2048,
-        messages=[
-            {"role": "system", "content": "You are an expert career coach and resume reviewer."},
-            {
-                "role": "user",
-                "content": (
-                    f"Resume:\n\n{resume_text}\n\n---\n\nJob Description:\n{jobDescription}\n\n---\n\n"
-                    "Analyze the resume against the job description:\n\n"
-                    "## Overall Match Score\nRate 1–10 with explanation.\n\n"
-                    "## Strengths\nKey strengths aligning with this role.\n\n"
-                    "## Gaps & Missing Skills\nMissing or underrepresented skills/keywords.\n\n"
-                    "## Specific Recommendations\n"
-                    "- Bullet points or sections to add/modify\n"
-                    "- Keywords to incorporate\n"
-                    "- Experiences to highlight\n\n"
-                    "## Summary\nOverall competitiveness for this role."
-                ),
-            },
-        ],
-    )
-    analysis = analysis_response.choices[0].message.content or ""
-
-    print("[3/3] Converting resume to LaTeX template and extracting structured data...")
-    latex_body, resume_data = "", {}
+    print("[stage1] Profiling resume and JD independently (parallel)...")
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        f_latex = executor.submit(generate_latex_body, resume_text)
-        f_struct = executor.submit(extract_structured_data, resume_text)
-        latex_body = f_latex.result()
+        f_resume_profile = executor.submit(analyze_resume_standalone, resume_text)
+        f_jd_profile     = executor.submit(analyze_jd_standalone, jobDescription)
+        resume_profile = f_resume_profile.result()
+        jd_profile     = f_jd_profile.result()
+    print("[stage1] Profiles complete")
+
+    print("[stage2] Synthesizing ATS analysis + generating LaTeX + extracting data (parallel)...")
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        f_analysis  = executor.submit(synthesize_ats_analysis, resume_profile, jd_profile, resume_text)
+        f_latex     = executor.submit(generate_latex_body, resume_text, resume_profile)
+        f_struct    = executor.submit(extract_structured_data, resume_text)
+        analysis    = f_analysis.result()
+        latex_body  = f_latex.result()
         resume_data = f_struct.result()
+    print("[stage2] Done")
 
     return {"analysis": analysis, "resumeText": resume_text, "latexBody": latex_body, "resumeData": resume_data}
 
@@ -385,37 +533,124 @@ async def compile_preview(latexBody: str = Form(...)):
 
 
 # ---------------------------------------------------------------------------
-# POST /api/chat  — conversational resume assistant
+# POST /api/chat  — AI agent: answers questions OR edits the LaTeX directly
 # ---------------------------------------------------------------------------
+
+_UPDATE_LATEX_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "update_latex",
+        "description": (
+            "Call this whenever the user asks to modify, rewrite, improve, add, remove, "
+            "or change any part of their resume content or wording. "
+            "Return the COMPLETE updated LaTeX body (\\begin{document}...\\end{document})."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "latex_body": {
+                    "type": "string",
+                    "description": (
+                        "The complete updated LaTeX body from \\begin{document} to \\end{document}. "
+                        "Must be valid Jake Gutierrez template LaTeX."
+                    ),
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "A short, friendly explanation of what was changed and why.",
+                },
+            },
+            "required": ["latex_body", "explanation"],
+        },
+    },
+}
+
+
 @app.post("/api/chat")
 async def chat(
     message: str = Form(...),
     history: str = Form(...),   # JSON array of {role, content}
     resumeText: str = Form(...),
+    latexBody: str = Form(default=""),
 ):
     try:
         history_list = json.loads(history)
     except Exception:
         history_list = []
 
+    system_prompt = (
+        "You are an expert career coach and LaTeX resume editor using the Jake Gutierrez template.\n\n"
+        "Rules:\n"
+        "- When the user asks to modify, improve, rewrite, add, or remove anything on their resume "
+        "→ call `update_latex` with the FULL updated body.\n"
+        "- When answering questions, giving advice, or explaining without editing → reply in markdown text only.\n"
+        "- Keep all LaTeX commands from the original template. Never introduce new \\usepackage commands.\n"
+        "- Escape special chars: & → \\&, % → \\%, # → \\#, $ → \\$, _ → \\_\n\n"
+        f"Current LaTeX body:\n```latex\n{latexBody}\n```\n\n"
+        f"Original resume text:\n{resumeText}"
+    )
+
     response = deepseek.chat.completions.create(
         model="deepseek-chat",
-        max_tokens=1024,
+        max_tokens=4096,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            *history_list,
+            {"role": "user", "content": message},
+        ],
+        tools=[_UPDATE_LATEX_TOOL],
+        tool_choice="auto",
+    )
+
+    msg = response.choices[0].message
+
+    # ── Tool call: AI wants to edit the resume ────────────────────────────
+    if msg.tool_calls:
+        tool_call = msg.tool_calls[0]
+        if tool_call.function.name == "update_latex":
+            args = json.loads(tool_call.function.arguments)
+            new_latex = strip_fences(args.get("latex_body", ""))
+            explanation = args.get("explanation", "I've updated your resume.")
+            return {"content": explanation, "latexBody": new_latex}
+
+    # ── Plain text response ───────────────────────────────────────────────
+    return {"content": msg.content or "", "latexBody": None}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/improve-bullet  — AI-rewrite a single bullet point
+# ---------------------------------------------------------------------------
+@app.post("/api/improve-bullet")
+async def improve_bullet(
+    bullet: str = Form(...),
+    context: str = Form(default=""),
+):
+    if not bullet.strip():
+        raise HTTPException(status_code=400, detail="bullet is required")
+
+    ctx_hint = f" for someone who is '{context}'" if context.strip() else ""
+
+    response = deepseek.chat.completions.create(
+        model="deepseek-chat",
+        max_tokens=256,
         messages=[
             {
                 "role": "system",
                 "content": (
-                    "You are an expert career coach and resume advisor. "
-                    "You have the user's resume below for context. "
-                    "Be concise, specific, and actionable. Use markdown formatting.\n\n"
-                    f"Resume:\n{resumeText}"
+                    "You are an expert resume writer. Rewrite the given resume bullet point "
+                    "to be more impactful: use strong action verbs, add measurable results where possible, "
+                    "and keep it to one concise line. Return ONLY the improved bullet text — no explanation, "
+                    "no formatting, no leading dash or bullet character."
                 ),
             },
-            *history_list,
-            {"role": "user", "content": message},
+            {
+                "role": "user",
+                "content": f"Improve this bullet point{ctx_hint}:\n\n{bullet}",
+            },
         ],
     )
-    return {"content": response.choices[0].message.content or ""}
+    improved = (response.choices[0].message.content or bullet).strip()
+    return {"improved": improved}
 
 
 # ---------------------------------------------------------------------------
@@ -429,42 +664,12 @@ async def apply_changes(
     if not resumeText.strip() or not analysis.strip():
         raise HTTPException(status_code=400, detail="resumeText and analysis are required")
 
-    print("[1/2] Generating improved LaTeX body...")
+    print("[1/1] Generating improved LaTeX body (1-page guided)...")
     body = generate_latex_body(resumeText, improvements=analysis)
 
-    # Verify page count; trim if needed
     pdf_bytes, page_count, error = try_compile_latex(RESUME_PREAMBLE + "\n" + body)
-
     if pdf_bytes is None:
         raise HTTPException(status_code=422, detail=f"Compilation failed:\n\n{error}")
 
-    if page_count > 1:
-        print(f"[2/2] {page_count} pages — trimming to 1...")
-        trim_response = deepseek.chat.completions.create(
-            model="deepseek-chat",
-            max_tokens=4096,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a LaTeX resume editor. Shorten the resume body to fit exactly 1 page. "
-                        "Use ONLY commands already present. Output ONLY \\begin{document} ... \\end{document}."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"This resume is {page_count} pages. Trim to 1 page by:\n"
-                        "- Shortening bullets to one tight line each\n"
-                        "- Removing the least relevant bullet points\n"
-                        "- Never removing section headings or contact info\n\n"
-                        f"Body:\n\n{body}"
-                    ),
-                },
-            ],
-        )
-        body = strip_fences(trim_response.choices[0].message.content or "")
-        _, page_count, _ = try_compile_latex(RESUME_PREAMBLE + "\n" + body)
-
-    print(f"[2/2] Done — {page_count} page(s)")
+    print(f"[1/1] Done — {page_count} page(s)")
     return {"latexBody": body, "pageCount": page_count}
