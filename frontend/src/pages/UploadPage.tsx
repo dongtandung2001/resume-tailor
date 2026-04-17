@@ -14,23 +14,26 @@ interface Props {
   jobDescription: string;
   isDragOver: boolean;
   loading: boolean;
+  urlFetchLoading: boolean;
   error: string;
   onFileChange: (file: File | null) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragLeave: () => void;
   onJobDescriptionChange: (value: string) => void;
+  onFetchJobFromUrl: (url: string) => void | Promise<void>;
   onAnalyze: () => void;
   onPasteLatex: (latex: string) => void;
 }
 
 export default function UploadPage({
-  resumeFile, jobDescription, isDragOver, loading, error,
+  resumeFile, jobDescription, isDragOver, loading, urlFetchLoading, error,
   onFileChange, onDrop, onDragOver, onDragLeave,
-  onJobDescriptionChange, onAnalyze, onPasteLatex,
+  onJobDescriptionChange, onFetchJobFromUrl, onAnalyze, onPasteLatex,
 }: Props) {
   const [mode, setMode] = useState<'upload' | 'paste'>('upload');
   const [pastedLatex, setPastedLatex] = useState('');
+  const [jobPostingUrl, setJobPostingUrl] = useState('');
 
   return (
     <Box sx={{
@@ -113,6 +116,32 @@ export default function UploadPage({
                 <WorkIcon fontSize="small" color="secondary" />
                 <Typography variant="h6">Job Description</Typography>
               </Box>
+              <Box display="flex" gap={1} alignItems="flex-start" mb={2}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Job URL"
+                  placeholder="https://…"
+                  value={jobPostingUrl}
+                  onChange={(e) => setJobPostingUrl(e.target.value)}
+                  variant="outlined"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      bgcolor: '#f8fafc', fontSize: '0.9rem',
+                      '&:hover fieldset': { borderColor: 'primary.main' },
+                    },
+                  }}
+                />
+                <Button
+                  variant="outlined"
+                  size="medium"
+                  disabled={!jobPostingUrl.trim() || urlFetchLoading || loading}
+                  onClick={() => { void onFetchJobFromUrl(jobPostingUrl.trim()); }}
+                  sx={{ flexShrink: 0, py: 1, px: 2, textTransform: 'none' }}
+                >
+                  {urlFetchLoading ? <CircularProgress size={18} color="inherit" /> : 'Load'}
+                </Button>
+              </Box>
               <TextField
                 fullWidth multiline rows={7}
                 placeholder="Paste the full job description here — responsibilities, requirements, preferred qualifications..."
@@ -126,9 +155,6 @@ export default function UploadPage({
                   },
                 }}
               />
-              <Typography variant="caption" color="text.disabled" mt={0.5} display="block">
-                {jobDescription.length} characters
-              </Typography>
             </Box>
 
             {/* Action */}
@@ -137,7 +163,7 @@ export default function UploadPage({
               <Button
                 variant="contained" fullWidth size="large"
                 onClick={onAnalyze}
-                disabled={loading || !resumeFile || !jobDescription.trim()}
+                disabled={loading || urlFetchLoading || !resumeFile || !jobDescription.trim()}
                 startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <AnalyticsIcon />}
                 sx={{
                   py: 1.5, fontSize: '1rem',

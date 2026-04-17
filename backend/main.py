@@ -1,11 +1,16 @@
 import io
+import ipaddress
 import json
 import os
 import re
+import socket
 import subprocess
 import tempfile
+from html import unescape as _html_unescape
+from urllib.parse import urlparse
 
 import fitz  # PyMuPDF
+import httpx
 import pytesseract
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -13,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from openai import OpenAI
 from PIL import Image
+from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -32,6 +38,313 @@ deepseek = OpenAI(
 )
 
 MAX_PDF_BYTES = 20 * 1024 * 1024  # 20 MB
+MAX_JOB_FETCH_BYTES = 2 * 1024 * 1024  # 2 MB
+
+_BLOCKED_HOSTS = frozenset(
+    {
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "::1",
+        "metadata.google.internal",
+        "metadata.goog",
+    }
+)
+
+
+def _assert_safe_public_job_url(url: str) -> None:
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Only http and https URLs are allowed")
+    host = (parsed.hostname or "").lower()
+    if not host or host in _BLOCKED_HOSTS:
+        raise HTTPException(status_code=400, detail="Invalid or disallowed URL host")
+
+    try:
+        ip = ipaddress.ip_address(host)
+        if not ip.is_global:
+            raise HTTPException(status_code=400, detail="Private or non-public addresses are not allowed")
+        return
+    except ValueError:
+        pass
+
+    try:
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except socket.gaierror as e:
+        raise HTTPException(status_code=400, detail=f"Could not resolve host: {e}") from e
+
+    for info in infos:
+        sockaddr = info[4]
+        addr = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if not ip.is_global:
+            raise HTTPException(status_code=400, detail="Host resolves to a non-public address")
+
+
+def _html_to_plain_text(html: str) -> str:
+    # Decode &lt; &amp; etc. so entity-encoded markup becomes real tags for BeautifulSoup.
+    html = _html_unescape(html)
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript", "svg"]):
+        tag.decompose()
+    text = soup.get_text(separator="\n", strip=True)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _looks_like_bot_or_login_wall(html: str) -> bool:
+    lower = html.lower()
+    return any(
+        m in lower
+        for m in (
+            "bot-detection",
+            "cf-challenge",
+            "cdn-cgi/challenge",
+            "just a moment",
+            "authenticating...",
+        )
+    )
+
+
+_FETCH_URL_FAILED = "Could not load text from that URL. Paste the job description instead."
+
+_FETCH_BROWSER_HEADERS = (
+    {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    },
+    {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+            "(KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    },
+)
+
+
+def _jsonld_job_field_to_plain(value) -> str:
+    """Turn schema.org JobPosting JSON values (HTML strings, lists, PostalAddress, etc.) into plain text."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        v = _html_unescape(value.strip())
+        if not v:
+            return ""
+        if "<" in v:
+            return _html_to_plain_text(v)
+        return v
+    if isinstance(value, list):
+        return "\n".join(_jsonld_job_field_to_plain(x) for x in value if x is not None).strip()
+    if isinstance(value, dict):
+        if value.get("name"):
+            return str(value["name"]).strip()
+        if "address" in value:
+            return _jsonld_job_field_to_plain(value["address"])
+        if any(value.get(k) for k in ("streetAddress", "addressLocality", "addressRegion", "addressCountry")):
+            parts = [
+                value.get("streetAddress"),
+                value.get("addressLocality"),
+                value.get("addressRegion"),
+                value.get("addressCountry"),
+            ]
+            return ", ".join(str(p) for p in parts if p)
+        return ""
+    return _html_unescape(str(value).strip())
+
+
+_LDJSON_JOBPOSTING_SECTIONS = (
+    ("employmentType", "Employment type"),
+    ("datePosted", "Posted"),
+    ("description", "Description"),
+    ("responsibilities", "Responsibilities"),
+    ("qualifications", "Qualifications"),
+    ("skills", "Skills"),
+    ("educationRequirements", "Education"),
+    ("experienceRequirements", "Experience"),
+    ("incentiveCompensation", "Compensation"),
+    ("occupationalCategory", "Category"),
+    ("industry", "Industry"),
+    ("benefits", "Benefits"),
+)
+
+
+def _ldjson_job_posting_text(html: str) -> str | None:
+    """schema.org JobPosting in <script type=\"application/ld+json\"> (e.g. Meta includes extra fields beyond description)."""
+    soup = BeautifulSoup(html, "html.parser")
+    blocks: list[str] = []
+    for sc in soup.find_all("script", attrs={"type": True}):
+        if "ld+json" not in sc.get("type", "").lower().replace(" ", ""):
+            continue
+        raw = (sc.string or "").strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            tp = item.get("@type")
+            types = tp if isinstance(tp, list) else [tp]
+            if "JobPosting" not in types:
+                continue
+            parts: list[str] = []
+            title = _jsonld_job_field_to_plain(item.get("title"))
+            if title:
+                parts.append(title)
+            ho = item.get("hiringOrganization")
+            if isinstance(ho, dict):
+                org = _jsonld_job_field_to_plain(ho.get("name"))
+                if org:
+                    parts.append(f"Organization\n{org}")
+            jl = item.get("jobLocation")
+            if jl is not None:
+                loc = _jsonld_job_field_to_plain(jl)
+                if loc:
+                    parts.append(f"Location\n{loc}")
+            for key, label in _LDJSON_JOBPOSTING_SECTIONS:
+                if key not in item:
+                    continue
+                body = _jsonld_job_field_to_plain(item[key])
+                if body:
+                    parts.append(f"{label}\n{body}")
+            combined = "\n\n".join(parts).strip()
+            if combined:
+                blocks.append(combined)
+    if not blocks:
+        return None
+    return "\n\n".join(blocks).strip()
+
+
+def _collect_strings_from_json(value, out: list[str]) -> None:
+    if isinstance(value, str):
+        s = _jsonld_job_field_to_plain(value)
+        if s and len(s) >= 40:
+            out.append(s)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _collect_strings_from_json(item, out)
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _collect_strings_from_json(item, out)
+
+
+def _embedded_job_json_text(html: str) -> str | None:
+    """
+    Fallback for SPA career sites where meaningful job text is in hydration JSON.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    candidates: list[str] = []
+
+    for sc in soup.find_all("script"):
+        raw = (sc.string or sc.get_text() or "").strip()
+        if not raw:
+            continue
+        low = raw.lower()
+        if "job" not in low and "description" not in low and "qualification" not in low:
+            continue
+
+        payload = raw
+        eq = raw.find("=")
+        if eq != -1 and ("{" in raw[eq + 1:] or "[" in raw[eq + 1:]):
+            payload = raw[eq + 1:].strip()
+        payload = payload.rstrip(";").strip()
+
+        for maybe_json in (payload, _html_unescape(payload)):
+            if not maybe_json or maybe_json[:1] not in ("{", "["):
+                continue
+            try:
+                parsed = json.loads(maybe_json)
+            except json.JSONDecodeError:
+                continue
+            found: list[str] = []
+            _collect_strings_from_json(parsed, found)
+            if found:
+                joined = "\n\n".join(dict.fromkeys(found))
+                if len(joined) >= 200:
+                    candidates.append(joined)
+                break
+
+    if not candidates:
+        return None
+    return max(candidates, key=len).strip()
+
+
+async def _verify_httpx_request_url(request: httpx.Request) -> None:
+    _assert_safe_public_job_url(str(request.url))
+
+
+async def _fetch_url_as_plain_text(url: str) -> tuple[str, str]:
+    for i, hdr in enumerate(_FETCH_BROWSER_HEADERS):
+        try:
+            async with httpx.AsyncClient(
+                follow_redirects=True,
+                timeout=httpx.Timeout(25.0),
+                headers=hdr,
+                event_hooks={"request": [_verify_httpx_request_url]},
+            ) as client:
+                response = await client.get(url)
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=502, detail=f"Could not reach URL ({type(e).__name__}).") from e
+
+        sc = response.status_code
+        if sc in (401, 403, 429):
+            raise HTTPException(status_code=422, detail=_FETCH_URL_FAILED)
+        if sc == 404:
+            raise HTTPException(status_code=422, detail="Page not found (404).")
+        if sc == 400 and i + 1 < len(_FETCH_BROWSER_HEADERS):
+            continue
+        if response.is_error:
+            raise HTTPException(
+                status_code=422,
+                detail=f"HTTP {sc}. Paste the job description instead.",
+            )
+
+        if len(response.content) > MAX_JOB_FETCH_BYTES:
+            raise HTTPException(status_code=413, detail="Page too large (max 2 MB).")
+
+        final_url = str(response.url)
+        ctype = (response.headers.get("content-type") or "").split(";")[0].strip().lower()
+        raw_text = response.text
+
+        if "html" in ctype or not ctype or ctype == "application/octet-stream":
+            if _looks_like_bot_or_login_wall(raw_text):
+                raise HTTPException(status_code=422, detail=_FETCH_URL_FAILED)
+
+        if ctype in ("text/plain", "text/markdown") or (ctype.startswith("text/") and "html" not in ctype):
+            text = raw_text
+        else:
+            text = _html_to_plain_text(raw_text)
+
+        ld = _ldjson_job_posting_text(raw_text)
+        if ld and len(text) < 80:
+            text = ld
+        elif ld and len(ld) > 200 and len(text) < max(80, len(ld) // 3):
+            text = ld
+        else:
+            embedded = _embedded_job_json_text(raw_text)
+            if embedded and len(embedded) > len(text):
+                text = embedded
+
+        if len(text) >= 80:
+            return text, final_url
+        if i + 1 < len(_FETCH_BROWSER_HEADERS):
+            continue
+
+    raise HTTPException(status_code=422, detail=_FETCH_URL_FAILED)
 
 # ---------------------------------------------------------------------------
 # Jake Gutierrez SWE resume template preamble (fixed — never sent to LLM)
@@ -459,6 +772,19 @@ def generate_latex_body(resume_text: str, improvements: str | None = None) -> st
         ],
     )
     return strip_fences(response.choices[0].message.content or "")
+
+
+# ---------------------------------------------------------------------------
+# POST /api/fetch-job-url  — download a job posting page and extract plain text
+# ---------------------------------------------------------------------------
+@app.post("/api/fetch-job-url")
+async def fetch_job_description_from_url(jobUrl: str = Form(...)):
+    raw_url = jobUrl.strip()
+    if not raw_url:
+        raise HTTPException(status_code=400, detail="URL is required")
+    _assert_safe_public_job_url(raw_url)
+    text, resolved_url = await _fetch_url_as_plain_text(raw_url)
+    return {"jobDescription": text, "resolvedUrl": resolved_url}
 
 
 # ---------------------------------------------------------------------------

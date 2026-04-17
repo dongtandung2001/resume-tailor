@@ -6,3 +6,5 @@ pytesseract==0.3.13
 Pillow==11.1.0
 openai==1.66.3
 python-dotenv==1.0.1
+httpx==0.28.1
+beautifulsoup4==4.12.3

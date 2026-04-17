@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { theme } from './theme';
 import { type View, type ResumeData } from './types';
-import { analyzeResume } from './api/resumeApi';
+import { analyzeResume, fetchJobDescriptionFromUrl } from './api/resumeApi';
 import { nanoid } from './utils/nanoid';
 import { parseLatexBody } from './utils/latexParser';
 import UploadPage from './pages/UploadPage';
@@ -33,6 +33,7 @@ export default function App() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [urlFetchLoading, setUrlFetchLoading] = useState(false);
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [resumeText, setResumeText] = useState('');
   const [analysis, setAnalysis] = useState('');
@@ -52,6 +53,19 @@ export default function App() {
     setIsDragOver(false);
     handleFileChange(e.dataTransfer.files[0] ?? null);
   }, [handleFileChange]);
+
+  const handleFetchJobFromUrl = async (url: string) => {
+    setUrlFetchLoading(true);
+    setError('');
+    try {
+      const { jobDescription: text } = await fetchJobDescriptionFromUrl(url);
+      setJobDescription(text);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load job posting');
+    } finally {
+      setUrlFetchLoading(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!resumeFile || !jobDescription.trim()) return;
@@ -107,12 +121,14 @@ export default function App() {
           jobDescription={jobDescription}
           isDragOver={isDragOver}
           loading={loading}
+          urlFetchLoading={urlFetchLoading}
           error={error}
           onFileChange={handleFileChange}
           onDrop={handleDrop}
           onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
           onDragLeave={() => setIsDragOver(false)}
           onJobDescriptionChange={setJobDescription}
+          onFetchJobFromUrl={handleFetchJobFromUrl}
           onAnalyze={handleAnalyze}
           onPasteLatex={handlePasteLatex}
         />
