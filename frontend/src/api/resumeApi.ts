@@ -1,12 +1,38 @@
 import type { ResumeData } from '../types';
 
+function apiErrorMessage(data: unknown, fallback: string): string {
+  const d = data as { detail?: unknown };
+  const detail = d?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => {
+      if (item && typeof item === 'object' && 'msg' in item) {
+        return String((item as { msg: unknown }).msg);
+      }
+      return typeof item === 'string' ? item : JSON.stringify(item);
+    });
+    const joined = parts.filter(Boolean).join(' ');
+    if (joined) return joined;
+  }
+  return fallback;
+}
+
+export async function fetchJobDescriptionFromUrl(jobUrl: string) {
+  const fd = new FormData();
+  fd.append('jobUrl', jobUrl);
+  const res = await fetch('/api/fetch-job-url', { method: 'POST', body: fd });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(apiErrorMessage(data, `Request failed (${res.status})`));
+  return data as { jobDescription: string; resolvedUrl: string };
+}
+
 export async function analyzeResume(resume: File, jobDescription: string) {
   const fd = new FormData();
   fd.append('resume', resume);
   fd.append('jobDescription', jobDescription);
   const res = await fetch('/api/analyze', { method: 'POST', body: fd });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || 'Analysis failed');
+  if (!res.ok) throw new Error(apiErrorMessage(data, 'Analysis failed'));
   return data as { analysis: string; resumeText: string; latexBody: string; resumeData: ResumeData };
 }
 
