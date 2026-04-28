@@ -108,6 +108,9 @@ export default function UploadPage(props: Props) {
         </Typography>
       </Box>
 
+      {/* CONTENT WRAPPER */}
+      <Box sx={{ maxWidth: 1100, mx: 'auto' }}>
+
         <Paper elevation={0} sx={{ border: '1px solid', borderColor: '#e2e8f0', borderRadius: 3, overflow: 'hidden', mb: 3 }}>
           <Box sx={{ p: 3, borderBottom: currentUser ? '1px solid #e2e8f0' : 'none' }}>
             <Box display="flex" alignItems="center" gap={1.5} mb={2}>
@@ -224,11 +227,9 @@ export default function UploadPage(props: Props) {
           )}
         </Paper>
 
-      {/* MAIN GRID */}
-      <Box
+      {/* MAIN GRID — only shown when logged in */}
+      {currentUser && <Box
         sx={{
-          maxWidth: 1100,
-          mx: 'auto',
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', md: '1.1fr 0.9fr' },
           gap: 4
@@ -428,7 +429,9 @@ export default function UploadPage(props: Props) {
           </Paper>
         </Box>
 
-      </Box>
+      </Box>} {/* end MAIN GRID */}
+
+      </Box> {/* end CONTENT WRAPPER */}
     </Box>
   );
 }
