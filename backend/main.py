@@ -7,7 +7,7 @@ import socket
 import subprocess
 import tempfile
 from html import unescape as _html_unescape
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import fitz  # PyMuPDF
 import httpx
@@ -52,6 +52,26 @@ _BLOCKED_HOSTS = frozenset(
 )
 
 
+_LINKEDIN_LOGIN_REQUIRED = (
+    "LinkedIn requires you to be signed in to view this job. "
+    "Open the job in your browser, copy the full description, and paste it instead."
+)
+
+
+def _normalize_job_url(url: str) -> str:
+    """Convert provider-specific collection/search URLs to canonical job-detail URLs."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+
+    # LinkedIn: /jobs/collections/...?currentJobId=123  →  /jobs/view/123/
+    if "linkedin.com" in host and "/jobs/view/" not in parsed.path:
+        job_id = parse_qs(parsed.query).get("currentJobId", [None])[0]
+        if job_id and job_id.isdigit():
+            return f"https://www.linkedin.com/jobs/view/{job_id}/"
+
+    return url
+
+
 def _assert_safe_public_job_url(url: str) -> None:
     parsed = urlparse(url.strip())
     if parsed.scheme not in ("http", "https"):
@@ -88,9 +108,26 @@ def _html_to_plain_text(html: str) -> str:
     # Decode &lt; &amp; etc. so entity-encoded markup becomes real tags for BeautifulSoup.
     html = _html_unescape(html)
     soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "noscript", "svg"]):
+
+    # Remove non-content tags (scripts, media, chrome layout elements).
+    for tag in soup(["script", "style", "noscript", "svg", "nav", "header", "footer", "aside"]):
         tag.decompose()
-    text = soup.get_text(separator="\n", strip=True)
+
+    # Remove elements whose ARIA role marks them as navigation/chrome rather than content.
+    _NOISE_ROLES = {"navigation", "banner", "contentinfo", "complementary", "search", "toolbar"}
+    for el in soup.find_all(attrs={"role": True}):
+        if el.get("role", "").lower() in _NOISE_ROLES:
+            el.decompose()
+
+    # Prefer the semantic main-content container when one exists; fall back to full page.
+    main = (
+        soup.find("main")
+        or soup.find(attrs={"role": "main"})
+        or soup.find("article")
+    )
+    target = main if main else soup
+
+    text = target.get_text(separator="\n", strip=True)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
@@ -105,8 +142,46 @@ def _looks_like_bot_or_login_wall(html: str) -> bool:
             "cdn-cgi/challenge",
             "just a moment",
             "authenticating...",
+            "authwall",           # LinkedIn auth-wall redirect
         )
     )
+
+
+def _extract_jd_with_llm(text: str) -> str:
+    """
+    Use LLM to isolate the job description from noisy scraped page text.
+    Falls back to the original text if the call fails.
+    """
+    # Cap input to avoid large token usage; real JDs fit comfortably in 12k chars.
+    truncated = text[:12000]
+    try:
+        resp = deepseek.chat.completions.create(
+            model="deepseek-chat",
+            max_tokens=2048,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a job description extractor. "
+                        "You receive raw text scraped from a job-posting web page — it may contain "
+                        "navigation menus, sign-in prompts, similar-job listings, ads, and other "
+                        "unrelated page content mixed with the actual posting.\n\n"
+                        "Return ONLY the job description content: job title, company, location, "
+                        "role summary, responsibilities, qualifications/requirements, and any "
+                        "'about the company' section. Preserve the original wording and structure. "
+                        "Output plain text only — no extra commentary."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Raw scraped text:\n\n{truncated}",
+                },
+            ],
+        )
+        extracted = (resp.choices[0].message.content or "").strip()
+        return extracted if len(extracted) >= 80 else text
+    except Exception:
+        return text
 
 
 _FETCH_URL_FAILED = "Could not load text from that URL. Paste the job description instead."
@@ -288,6 +363,9 @@ async def _verify_httpx_request_url(request: httpx.Request) -> None:
 
 
 async def _fetch_url_as_plain_text(url: str) -> tuple[str, str]:
+    url = _normalize_job_url(url)
+    is_linkedin = "linkedin.com" in (urlparse(url).hostname or "")
+
     for i, hdr in enumerate(_FETCH_BROWSER_HEADERS):
         try:
             async with httpx.AsyncClient(
@@ -301,8 +379,12 @@ async def _fetch_url_as_plain_text(url: str) -> tuple[str, str]:
             raise HTTPException(status_code=502, detail=f"Could not reach URL ({type(e).__name__}).") from e
 
         sc = response.status_code
+        # LinkedIn returns 999 for bot-detected requests.
+        if is_linkedin and sc == 999:
+            raise HTTPException(status_code=422, detail=_LINKEDIN_LOGIN_REQUIRED)
         if sc in (401, 403, 429):
-            raise HTTPException(status_code=422, detail=_FETCH_URL_FAILED)
+            detail = _LINKEDIN_LOGIN_REQUIRED if is_linkedin else _FETCH_URL_FAILED
+            raise HTTPException(status_code=422, detail=detail)
         if sc == 404:
             raise HTTPException(status_code=422, detail="Page not found (404).")
         if sc == 400 and i + 1 < len(_FETCH_BROWSER_HEADERS):
@@ -320,24 +402,30 @@ async def _fetch_url_as_plain_text(url: str) -> tuple[str, str]:
         ctype = (response.headers.get("content-type") or "").split(";")[0].strip().lower()
         raw_text = response.text
 
+        # Detect auth walls (Cloudflare, LinkedIn authwall redirect, etc.)
         if "html" in ctype or not ctype or ctype == "application/octet-stream":
             if _looks_like_bot_or_login_wall(raw_text):
-                raise HTTPException(status_code=422, detail=_FETCH_URL_FAILED)
+                detail = _LINKEDIN_LOGIN_REQUIRED if is_linkedin else _FETCH_URL_FAILED
+                raise HTTPException(status_code=422, detail=detail)
 
         if ctype in ("text/plain", "text/markdown") or (ctype.startswith("text/") and "html" not in ctype):
             text = raw_text
         else:
             text = _html_to_plain_text(raw_text)
 
+        # Prefer clean structured JobPosting data (schema.org LD+JSON) when available.
         ld = _ldjson_job_posting_text(raw_text)
-        if ld and len(text) < 80:
+        if ld and len(ld) >= 200:
+            # Structured data is already clean — no LLM extraction needed.
             text = ld
-        elif ld and len(ld) > 200 and len(text) < max(80, len(ld) // 3):
+        elif ld and len(text) < 80:
             text = ld
         else:
             embedded = _embedded_job_json_text(raw_text)
             if embedded and len(embedded) > len(text):
                 text = embedded
+            # No clean structured source: let LLM isolate the JD from page noise.
+            text = _extract_jd_with_llm(text)
 
         if len(text) >= 80:
             return text, final_url
