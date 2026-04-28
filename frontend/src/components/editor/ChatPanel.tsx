@@ -25,12 +25,24 @@ interface Props {
 }
 
 export default function ChatPanel({ resumeText, initialAnalysis, latexBody, onLatexChange }: Props) {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: initialAnalysis },
-  ]);
+  const [messages, setMessages] = useState<Message[]>(() =>
+    initialAnalysis ? [{ role: 'assistant', content: initialAnalysis }] : [],
+  );
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const analysisSeeded = useRef(!!initialAnalysis);
+
+  // Populate the first message if analysis arrives after the component mounts
+  useEffect(() => {
+    if (!initialAnalysis || analysisSeeded.current) return;
+    analysisSeeded.current = true;
+    setMessages((prev) =>
+      prev.length === 0
+        ? [{ role: 'assistant', content: initialAnalysis }]
+        : prev,
+    );
+  }, [initialAnalysis]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

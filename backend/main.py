@@ -667,7 +667,8 @@ def analyze_resume_standalone(resume_text: str) -> str:
             },
         ],
     )
-    return response.choices[0].message.content or ""
+    msg = response.choices[0].message
+    return msg.content or getattr(msg, "reasoning_content", None) or ""
 
 
 def analyze_jd_standalone(job_description: str) -> str:
@@ -717,7 +718,7 @@ def synthesize_ats_analysis(resume_profile: str, jd_profile: str, resume_text: s
     """Stage 2A — deep gap synthesis using pre-analyzed profiles."""
     response = deepseek.chat.completions.create(
         model="deepseek-reasoner",
-        max_tokens=4096,
+        max_tokens=8000,
         messages=[
             {
                 "role": "system",
@@ -776,7 +777,8 @@ def synthesize_ats_analysis(resume_profile: str, jd_profile: str, resume_text: s
             },
         ],
     )
-    return response.choices[0].message.content or ""
+    msg = response.choices[0].message
+    return msg.content or getattr(msg, "reasoning_content", None) or ""
 
 
 def extract_structured_data(resume_text: str) -> dict:
