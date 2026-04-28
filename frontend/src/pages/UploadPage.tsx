@@ -9,10 +9,25 @@ import {
   Work as WorkIcon,
   UploadFile as UploadIcon,
   Code as CodeIcon,
-  ArrowForward as ArrowIcon,
-  Description as DescriptionIcon
+  ArrowForward as ArrowIcon
 } from '@mui/icons-material';
 import FileDropzone from '../components/upload/FileDropzone';
+
+/* ✅ FIX: Define Props interface */
+interface Props {
+  resumeFile: File | null;
+  jobDescription: string;
+  isDragOver: boolean;
+  loading: boolean;
+  error: string;
+  onFileChange: (file: File | null) => void;
+  onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragLeave: () => void;
+  onJobDescriptionChange: (value: string) => void;
+  onAnalyze: () => void;
+  onPasteLatex: (latex: string) => void;
+}
 
 export default function UploadPage(props: Props) {
   const {
@@ -54,10 +69,9 @@ export default function UploadPage(props: Props) {
         }}
       >
 
-        {/* LEFT: INPUT CARD */}
+        {/* LEFT */}
         <Paper sx={{ p: 4, borderRadius: 4 }} elevation={3}>
 
-          {/* Toggle */}
           <ToggleButtonGroup
             exclusive value={mode}
             onChange={(_, v) => v && setMode(v)}
@@ -72,7 +86,6 @@ export default function UploadPage(props: Props) {
             </ToggleButton>
           </ToggleButtonGroup>
 
-          {/* UPLOAD MODE */}
           {mode === 'upload' && (
             <>
               <Typography fontWeight={600} mb={1}>
@@ -111,7 +124,6 @@ export default function UploadPage(props: Props) {
             </>
           )}
 
-          {/* LATEX MODE */}
           {mode === 'paste' && (
             <>
               <Typography fontWeight={600} mb={1}>
@@ -136,7 +148,6 @@ export default function UploadPage(props: Props) {
             </>
           )}
 
-          {/* ACTION */}
           {mode === 'upload' && (
             <Box mt={4}>
               {error && <Alert severity="error">{error}</Alert>}
@@ -171,7 +182,7 @@ export default function UploadPage(props: Props) {
           )}
         </Paper>
 
-        {/* RIGHT: INFO PANEL */}
+        {/* RIGHT */}
         <Box>
           <Paper sx={{ p: 4, borderRadius: 4, mb: 3 }} elevation={2}>
             <Typography fontWeight={700} mb={2}>
@@ -200,29 +211,14 @@ export default function UploadPage(props: Props) {
             </Typography>
 
             <Box component="ul" sx={{ pl: 3, m: 0 }}>
-              <li>
-                <Typography variant="body2" color="text.secondary">
-                  Improves ATS match score
-                </Typography>
-              </li>
-              <li>
-                <Typography variant="body2" color="text.secondary">
-                  Highlights relevant skills
-                </Typography>
-              </li>
-              <li>
-                <Typography variant="body2" color="text.secondary">
-                  Saves hours of manual editing
-                </Typography>
-              </li>
-              <li>
-                <Typography variant="body2" color="text.secondary">
-                  Increases interview chances
-                </Typography>
-              </li>
+              <li><Typography variant="body2" color="text.secondary">Improves ATS match score</Typography></li>
+              <li><Typography variant="body2" color="text.secondary">Highlights relevant skills</Typography></li>
+              <li><Typography variant="body2" color="text.secondary">Saves hours of manual editing</Typography></li>
+              <li><Typography variant="body2" color="text.secondary">Increases interview chances</Typography></li>
             </Box>
           </Paper>
         </Box>
+
       </Box>
     </Box>
   );
