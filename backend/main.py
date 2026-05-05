@@ -888,6 +888,7 @@ def generate_latex_body(resume_text: str, improvements: str | None = None) -> st
                     "2. Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
                     "3. Output ONLY \\begin{document} ... \\end{document}. No markdown fences.\n"
                     "4. STRICT 1-PAGE LIMIT — shorten bullets if needed, never drop an entry.\n"
+                    "5. SKILLS FORMAT: single \\textbf{Skills:} line with a flat comma-separated list — no category groups.\n"
                     f"{improvement_rules}"
                 ),
             },
@@ -1443,6 +1444,11 @@ def apply_improvements_to_latex(latex_body: str, improvements: str, job_descript
                     "(e.g. 'OpenAI GPT-4', 'yt_dlp', 'Tesseract OCR', 'Langchain', 'Docker Compose'). "
                     "You may only ADD new keywords alongside them, never substitute generic phrases for them.\n"
                     "- Preserve all facts (dates, companies, metrics, and every named technology).\n"
+                    "- SKILLS FORMAT: The Skills section must be a single \\textbf{Skills:} line followed by a "
+                    "flat comma-separated list — exactly as shown in the canonical format. "
+                    "Do NOT split into category groups (no 'Languages:', 'Frameworks:', etc.).\n"
+                    "- SECTION ORDER: must be exactly Education → Professional Experience → Projects & Outside Experience → Skills. "
+                    "Do NOT reorder sections regardless of ATS recommendations.\n"
                     "- Use ONLY commands defined in the preamble — no new \\usepackage, no \\faPhone.\n"
                     "- Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
                     "- Output ONLY \\begin{document} ... \\end{document}.\n"

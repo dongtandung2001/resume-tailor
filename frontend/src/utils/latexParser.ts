@@ -12,6 +12,9 @@ function unesc(s: string): string {
     .replace(/\\%/g, '%')
     .replace(/\\#/g, '#')
     .replace(/\\_/g, '_')
+    .replace(/\\textasciitilde\{\}/g, '~')
+    .replace(/\\textless\{\}/g, '<')
+    .replace(/\\textgreater\{\}/g, '>')
     .trim();
 }
 
@@ -36,14 +39,14 @@ function getArgs(s: string, pos: number, count: number): string[] {
   return args;
 }
 
-// ── Section extractor ─────────────────────────────────────────────────────
+// ── Section extractor — supports both \section{} and \sectionHeading{} ───
 function extractSection(latex: string, ...names: string[]): string {
   for (const name of names) {
     const flexName = name
       .replace(/[.*+?^$()|[\]]/g, '\\$&')
       .replace(/&/g, '(?:&|\\\\&)');
     const re = new RegExp(
-      `\\\\section\\{\\s*${flexName}\\s*\\}([\\s\\S]*?)(?=\\\\section\\{|\\\\end\\{document\\})`,
+      `\\\\(?:section|sectionHeading)\\{\\s*${flexName}\\s*\\}([\\s\\S]*?)(?=\\\\(?:section|sectionHeading)\\{|\\\\end\\{document\\})`,
       'i',
     );
     const m = latex.match(re);
@@ -52,16 +55,35 @@ function extractSection(latex: string, ...names: string[]): string {
   return '';
 }
 
-// ── Resume items (bullets) inside a chunk ────────────────────────────────
+// ── Bullets: handles both \resumeItem{} (old) and \item (new) ────────────
 function extractItems(chunk: string): string[] {
   const items: string[] = [];
-  const re = /\\resumeItem\{/g;
+
+  // Old template: \resumeItem{text}
+  const oldRe = /\\resumeItem\{/g;
   let m;
-  while ((m = re.exec(chunk)) !== null) {
+  while ((m = oldRe.exec(chunk)) !== null) {
     const args = getArgs(chunk, m.index + m[0].length - 1, 1);
     if (args[0] !== undefined) items.push(unesc(args[0]));
   }
+  if (items.length > 0) return items;
+
+  // New template: \item text inside resumeItemize
+  const itemRe = /\\item\s+([\s\S]*?)(?=\\item\s|\\end\{resumeItemize\}|$)/g;
+  while ((m = itemRe.exec(chunk)) !== null) {
+    const text = m[1]
+      .replace(/\\\\\s*/g, ' ')  // collapse \\ line breaks
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) items.push(unesc(text));
+  }
   return items;
+}
+
+// ── Parse date string: handles both " - " and " -- " separators ──────────
+function parseDateRange(dateStr: string): [string, string] {
+  const parts = dateStr.split(/\s*--?\s*/).map(s => s.trim());
+  return [parts[0] ?? '', parts[1] ?? ''];
 }
 
 // ── Header ────────────────────────────────────────────────────────────────
@@ -72,34 +94,53 @@ function parseHeader(latex: string): ResumeHeader {
   if (!centerM) return h;
   const center = centerM[1];
 
-  const nameM = center.match(/\\textbf\{\\Huge \\scshape ([^}]+)\}/);
-  if (nameM) h.name = unesc(nameM[1]);
+  // New template: {\fontsize{30}{36}\selectfont\bfseries FIRST LAST}
+  const newNameM = center.match(/\\bfseries\s+([A-Z][A-Z\s]+?)(?=\s*}|\s*\\par)/);
+  if (newNameM) {
+    h.name = newNameM[1].trim();
+  } else {
+    // Old template: \textbf{\Huge \scshape Name}
+    const oldNameM = center.match(/\\textbf\{\\Huge\s+(?:\\scshape\s+)?([^}]+)\}/);
+    if (oldNameM) h.name = unesc(oldNameM[1]);
+  }
 
-  const contactM = center.match(/\\small\s+([\s\S]*?)(?=\n\s*\\end|\n\s*$)/m)
-    ?? center.match(/\\small\s+([\s\S]+)/);
-  if (!contactM) return h;
+  // Extract the contact line block — new template wraps in {\fontsize{10}{16}\selectfont ...}
+  // Old template uses \small ...
+  const contactBlock =
+    center.match(/\\fontsize\{10\}\{[^}]+\}\\selectfont\s*([\s\S]*?)(?=\s*\}\s*$)/)?.[1] ??
+    center.match(/\\small\s+([\s\S]*?)(?=\n\s*\\end|\n\s*$)/m)?.[1] ??
+    center.match(/\\small\s+([\s\S]+)/)?.[1] ??
+    '';
 
-  const parts = contactM[1].split(/\s*\$\|\$\s*/);
-  for (const raw of parts) {
-    const p = raw.trim();
-    if (!p) continue;
-
-    const emailM = p.match(/\\href\{mailto:([^}]+)\}/);
-    if (emailM) { h.email = unesc(emailM[1]); continue; }
-
-    const hrefM = p.match(/\\href\{https?:\/\/([^}]+)\}/);
-    if (hrefM) {
-      const url = unesc(hrefM[1]);
-      if (url.includes('linkedin.com') && !h.linkedin) { h.linkedin = url; continue; }
-      if (url.includes('github.com') && !h.github)    { h.github = url; continue; }
-      if (!h.website) { h.website = url; continue; }
+  // Extract all \href{url}{display} directly — avoids separator-split consuming leading backslash
+  const hrefRe = /\\href\{([^}]+)\}\{([^}]*)\}/g;
+  let hm: RegExpExecArray | null;
+  while ((hm = hrefRe.exec(contactBlock)) !== null) {
+    const url   = hm[1].trim();
+    const label = unesc(hm[2].trim());
+    if (url.startsWith('mailto:')) {
+      if (!h.email) h.email = url.slice('mailto:'.length);
+    } else if (url.includes('linkedin.com') && !h.linkedin) {
+      h.linkedin = label || url.replace(/^https?:\/\//, '');
+    } else if (url.includes('github.com') && !h.github) {
+      h.github = label || url.replace(/^https?:\/\//, '');
+    } else if (!h.website) {
+      h.website = label || url.replace(/^https?:\/\//, '');
     }
+  }
 
-    // Strip all remaining LaTeX commands to get plain text
-    const plain = unesc(p.replace(/\\[a-zA-Z]+(\{[^}]*\})?/g, '').replace(/[{}]/g, '').trim());
-    if (!plain) continue;
-    if (/[\d()+-]{6,}/.test(plain) && !h.phone) { h.phone = plain; continue; }
-    if (!h.location) { h.location = plain; }
+  // Extract phone and location from plain text (with hrefs removed).
+  // Convert \ | \ separators to double-space FIRST so they act as split points.
+  const plainText = contactBlock
+    .replace(/\\href\{[^}]+\}\{[^}]*\}/g, '')
+    .replace(/\\\\\s*\[.*?\]/g, '  ')        // \\[4.6pt] line break → separator
+    .replace(/\s*\\\s*\|\s*\\\s*/g, '  ')    // \ | \ contact separator → separator
+    .replace(/\\[a-zA-Z]+(\{[^}]*\})?/g, ' ')
+    .replace(/[{}\\|]/g, ' ');               // strip remaining \ { } |
+
+  for (const part of plainText.split(/\s{2,}/).map(s => s.trim()).filter(Boolean)) {
+    if (/[\d()+-]{6,}/.test(part) && !h.phone) { h.phone = part; continue; }
+    if (!h.location && part.length > 2) h.location = part;
   }
 
   return h;
@@ -119,12 +160,10 @@ function parseEducation(latex: string): EducationEntry[] {
   for (let i = 0; i < positions.length; i++) {
     const chunk = section.slice(positions[i], positions[i + 1] ?? section.length);
     const args = getArgs(chunk, '\\resumeSubheading'.length, 4);
-    if (args.length < 4) continue;
-    // New format: {institution}{date} / {degree}{GPA or empty}
-    const [inst, dateStr, degree, gpaRaw] = args.map(unesc);
-    const [startDate = '', endDate = ''] = dateStr.split(/\s*--\s*/).map(s => s.trim());
-    const gpa = unesc(gpaRaw).replace(/^GPA:\s*/i, '').trim();
-
+    if (args.length < 2) continue;
+    const [inst, dateStr, degree = '', gpaRaw = ''] = args.map(unesc);
+    const [startDate, endDate] = parseDateRange(dateStr);
+    const gpa = gpaRaw.replace(/^GPA:\s*/i, '').trim();
     entries.push({ id: nanoid(), institution: inst, location: '', degree, startDate, endDate, gpa, bullets: extractItems(chunk) });
   }
   return entries;
@@ -145,9 +184,8 @@ function parseExperience(latex: string): ExperienceEntry[] {
     const chunk = section.slice(positions[i], positions[i + 1] ?? section.length);
     const args = getArgs(chunk, '\\resumeSubheading'.length, 4);
     if (args.length < 4) continue;
-    // New format: {company}{location} / {title}{date}
     const [company, location, title, dateRange] = args.map(unesc);
-    const [startDate = '', endDate = ''] = dateRange.split(/\s*--\s*/).map(s => s.trim());
+    const [startDate, endDate] = parseDateRange(dateRange);
     entries.push({ id: nanoid(), company, title, location, startDate, endDate, bullets: extractItems(chunk) });
   }
   return entries;
@@ -177,14 +215,11 @@ function parseProjects(latex: string): ProjectEntry[] {
 
     const name = unesc(nameRaw);
     const technologies = unesc(techRaw);
-
-    // If arg4 is non-empty → arg2 is location, arg4 is date range
-    // If arg4 is empty     → arg2 is date range, no location
     const arg4 = unesc(arg4Raw).trim();
     const arg2 = unesc(arg2Raw).trim();
-    const location   = arg4 ? arg2 : '';
-    const dateStr    = arg4 ? arg4 : arg2;
-    const [startDate = '', endDate = ''] = dateStr.split(/\s*--\s*/).map(s => s.trim());
+    const location = arg4 ? arg2 : '';
+    const dateStr  = arg4 ? arg4 : arg2;
+    const [startDate, endDate] = parseDateRange(dateStr);
 
     entries.push({ id: nanoid(), name, location, technologies, startDate, endDate, bullets: extractItems(chunk) });
   }
@@ -195,16 +230,24 @@ function parseProjects(latex: string): ProjectEntry[] {
 function parseSkills(latex: string): string {
   const section = extractSection(latex, 'Skills', 'Technical Skills', 'SKILLS');
   if (!section) return '';
-  // Collect ALL \textbf{Category}{: values} pairs (AI may generate multiple categories)
-  const pattern = /\\textbf\{[^}]*\}\{:\s*([^}]+)\}/g;
+
+  // New template: \textbf{Skills:} comma, separated, list
+  const newM = section.match(/\\textbf\{[^}]*\}\s+([\s\S]+)/);
+  if (newM) {
+    return unesc(newM[1].replace(/\\\\\s*/g, ' ').replace(/\s+/g, ' ')).trim();
+  }
+
+  // Old template: \textbf{Category}{: values}
+  const oldPattern = /\\textbf\{[^}]*\}\{:\s*([^}]+)\}/g;
   const values: string[] = [];
   let m;
-  while ((m = pattern.exec(section)) !== null) {
+  while ((m = oldPattern.exec(section)) !== null) {
     const v = unesc(m[1]).trim();
     if (v) values.push(v);
   }
   if (values.length > 0) return values.join(', ');
-  // Fallback: grab everything after the last colon in the itemize block
+
+  // Fallback
   const raw = section.replace(/\\[a-zA-Z]+(\{[^}]*\})?|\{|\}/g, ' ').replace(/\s+/g, ' ');
   const colon = raw.lastIndexOf(':');
   return colon >= 0 ? raw.slice(colon + 1).trim() : raw.trim();
