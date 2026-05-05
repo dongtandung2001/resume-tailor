@@ -444,132 +444,101 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 DB_PATH = DATA_DIR / "app.db"
 
 # ---------------------------------------------------------------------------
-# Jake Gutierrez SWE resume template preamble — injected into LLM system prompts
+# SWE resume template preamble — injected into LLM system prompts
 # so the model knows exactly which commands are available and their signatures.
 # ---------------------------------------------------------------------------
 RESUME_PREAMBLE = r"""\documentclass[letterpaper,10pt]{article}
 
-\usepackage{latexsym}
-\usepackage[empty]{fullpage}
-\usepackage{titlesec}
-\usepackage{marvosym}
-\usepackage[usenames,dvipsnames]{color}
-\usepackage{verbatim}
-\usepackage{enumitem}
+\usepackage[margin=40pt,top=46.5pt,bottom=30pt]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{mathptmx}
 \usepackage[hidelinks]{hyperref}
-\usepackage{fancyhdr}
-\usepackage[english]{babel}
-\usepackage{tabularx}
-\input{glyphtounicode}
+\usepackage{enumitem}
+\usepackage{array}
 
-\pagestyle{fancy}
-\fancyhf{}
-\fancyfoot{}
-\renewcommand{\headrulewidth}{0pt}
-\renewcommand{\footrulewidth}{0pt}
-
-\addtolength{\oddsidemargin}{-0.5in}
-\addtolength{\evensidemargin}{-0.5in}
-\addtolength{\textwidth}{1in}
-\addtolength{\topmargin}{-.6in}
-\addtolength{\textheight}{1.2in}
-
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\setlength{\tabcolsep}{0pt}
+\renewcommand{\arraystretch}{1.0}
 \urlstyle{same}
-\raggedbottom
-\raggedright
-\setlength{\tabcolsep}{0in}
 
-\titleformat{\section}{
-  \bfseries\raggedright\large
-}{}{0em}{}[\color{black}\titlerule]
-\titlespacing*{\section}{0pt}{8pt}{4pt}
+\newcommand{\sectionHeading}[1]{%
+  \vspace{11pt}%
+  {\fontsize{12}{14.4}\selectfont\bfseries #1}\par\vspace{3.5pt}%
+  \hrule height 1pt\vspace{10.9pt}%
+}
 
-\pdfgentounicode=1
+\newcommand{\resumeSubheading}[4]{%
+  \noindent\begin{tabular*}{\textwidth}{@{}l@{\extracolsep{\fill}}r@{}}
+    \textbf{#1} & \textbf{#2}\\
+    \textit{#3} & \textit{#4}
+  \end{tabular*}\par
+}
 
-\newcommand{\resumeItem}[1]{
-  \item\small{{#1 \vspace{-2pt}}}
+\newcommand{\resumeProjectHeading}[4]{%
+  \noindent\begin{tabular*}{\textwidth}{@{}l@{\extracolsep{\fill}}r@{}}
+    \textbf{#1} & \textit{#2}\\
+    \textit{#3} & \textit{#4}
+  \end{tabular*}\par
 }
-\newcommand{\resumeSubheading}[4]{
-  \vspace{-2pt}\item
-    \begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
-      \textbf{#1} & \small #2 \\
-      \textit{\small#3} & \textit{\small #4} \\
-    \end{tabular*}\vspace{-7pt}
-}
-\newcommand{\resumeSubSubheading}[2]{
-    \item
-    \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
-      \textit{\small#1} & \textit{\small #2} \\
-    \end{tabular*}\vspace{-7pt}
-}
-\newcommand{\resumeProjectHeading}[4]{
-  \vspace{-2pt}\item
-    \begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
-      \textbf{#1} & \small #2 \\
-      \textit{\small#3} & \textit{\small #4} \\
-    \end{tabular*}\vspace{-7pt}
-}
-\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
-\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
-\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0pt, label={}]}
-\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
-\newcommand{\resumeItemListStart}{\begin{itemize}}
-\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\newenvironment{resumeItemize}{%
+  \begin{itemize}[leftmargin=16.5pt,labelsep=5pt,labelwidth=3.5pt,itemsep=0pt,parsep=0pt,topsep=0pt,partopsep=0pt,label=\textbullet]
+}{\end{itemize}}
 """
 
-# One-shot example body shown to LLM — it must ONLY use commands visible here
+# One-shot example body shown to LLM — exact format to replicate, just replace content
 RESUME_BODY_EXAMPLE = r"""
 \begin{document}
 
 \begin{center}
-    \textbf{\Huge JAKE RYAN} \\ \vspace{3pt}
-    \small 123-456-7890 $|$ \href{mailto:jake@su.edu}{jake@su.edu} $|$ San Jose, CA, USA $|$
-    \href{https://linkedin.com/in/jake}{linkedin.com/in/jake} $|$
-    \href{https://github.com/jake}{github.com/jake} $|$
-    \href{https://jakesite.dev}{jakesite.dev}
+  {\fontsize{30}{36}\selectfont\bfseries JAKE RYAN}\par\vspace{1.3pt}
+  {\fontsize{10}{16}\selectfont
+  123-456-7890 \ | \ \href{mailto:jake@su.edu}{jake@su.edu} \ | \ San Jose, CA, USA \ | \ \href{https://linkedin.com/in/jake}{linkedin.com/in/jake} \ | \\[4.6pt]
+  \href{https://github.com/jake}{github.com/jake} \ | \ \href{https://jakesite.dev}{jakesite.dev}
+  }
 \end{center}
+\vspace{-10pt}
 
-\section{EDUCATION}
-  \resumeSubHeadingListStart
-    \resumeSubheading
-      {Southwestern University}{Aug. 2018 -- May 2021}
-      {Bachelor of Arts in Computer Science, Minor in Business}{}
-  \resumeSubHeadingListEnd
+\sectionHeading{EDUCATION}
+\resumeSubheading{Southwestern University}{August 2018 - May 2021}{Bachelor of Arts in Computer Science, Minor in Business}{}
+\begin{resumeItemize}
+  \item Relevant Coursework: Algorithms, Operating Systems, Software Engineering.
+\end{resumeItemize}
+\vspace{11.4pt}
+\resumeSubheading{Another University}{August 2016 - May 2018}{Associate Degree in Mathematics}{GPA: 3.9}
 
-\section{PROFESSIONAL EXPERIENCE}
-  \resumeSubHeadingListStart
-    \resumeSubheading
-      {Texas A\&M University}{College Station, TX}
-      {Undergraduate Research Assistant}{June 2020 -- Present}
-      \resumeItemListStart
-        \resumeItem{Developed a REST API using FastAPI and PostgreSQL to store data from learning management systems}
-        \resumeItem{Developed a full-stack web application using Flask, React, PostgreSQL and Docker}
-      \resumeItemListEnd
-  \resumeSubHeadingListEnd
+\sectionHeading{PROFESSIONAL EXPERIENCE}
+\resumeSubheading{Acme Corp}{New York, NY, USA}{Software Engineer Intern}{June 2020 - August 2020}
+\begin{resumeItemize}
+  \item Developed a REST API using FastAPI and PostgreSQL to store data from learning management systems.
+  \item Built a full-stack web application using Flask, React, PostgreSQL and Docker, reducing onboarding time by 20\%.
+  \item Automated CI/CD pipeline with GitHub Actions, cutting release cycle from 2 weeks to 3 days.
+\end{resumeItemize}
+\vspace{11.4pt}
+\resumeSubheading{Beta Systems}{Remote}{Backend Engineer Intern}{January 2019 - May 2019}
+\begin{resumeItemize}
+  \item Built microservices in Go deployed on AWS ECS, reducing p99 latency by 30\%.
+  \item Improved median LCP by 40\% through asset pruning and CDN caching.
+\end{resumeItemize}
 
-\section{PROJECTS \& OUTSIDE EXPERIENCE}
-    \resumeSubHeadingListStart
-      \resumeProjectHeading
-          {Gitlytics}{San Francisco, CA}
-          {Python, Flask, React, PostgreSQL, Docker}{June 2020 -- Present}
-          \resumeItemListStart
-            \resumeItem{Developed a full-stack web application using Flask serving a REST API with React as the frontend}
-            \resumeItem{Implemented GitHub OAuth to get data from user's repositories}
-          \resumeItemListEnd
-      \resumeProjectHeading
-          {Open Source CLI Tool}{}
-          {Go, Cobra, GitHub Actions}{Jan. 2023 -- Mar. 2023}
-          \resumeItemListStart
-            \resumeItem{Built a command-line tool to automate deployment workflows with zero downtime}
-          \resumeItemListEnd
-    \resumeSubHeadingListEnd
+\sectionHeading{PROJECTS \& OUTSIDE EXPERIENCE}
+\resumeProjectHeading{Open Source CLI Tool}{January 2023 - March 2023}{Go, Cobra, GitHub Actions}{}
+\begin{resumeItemize}
+  \item Built a command-line tool to automate deployment workflows with zero downtime.
+  \item Published to GitHub with 200+ stars; integrated automated release via GitHub Actions.
+\end{resumeItemize}
+\vspace{11.4pt}
+\resumeProjectHeading{Analytics Dashboard}{San Francisco, CA}{Python, Flask, React, PostgreSQL, Docker}{June 2020 - August 2020}
+\begin{resumeItemize}
+  \item Developed a full-stack web application using Flask serving a REST API with React as the frontend.
+  \item Implemented OAuth to get data from user repositories and render charts with D3.js.
+\end{resumeItemize}
 
-\section{SKILLS}
- \begin{itemize}[leftmargin=0.15in, label={}]
-    \small{\item{
-     \textbf{Skills}{: Java, Python, C/C++, SQL, JavaScript, HTML/CSS, React, Node.js, Flask, Git, Docker}
-    }}
- \end{itemize}
+\sectionHeading{SKILLS}
+\textbf{Skills:} Java, Python, C/C++, SQL, JavaScript, HTML/CSS, React, Node.js, Flask, Git, Docker, AWS, PostgreSQL
 
 \end{document}
 """
@@ -581,6 +550,27 @@ RESUME_BODY_EXAMPLE = r"""
 def strip_fences(raw: str) -> str:
     cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", raw.strip())
     return re.sub(r"\n?```$", "", cleaned.strip()).strip()
+
+
+_MONTH = r'(?:January|February|March|April|May|June|July|August|September|October|November|December)'
+_SAME_DATE_RE = re.compile(rf'({_MONTH}\s+\d{{4}})\s*[-–]\s*\1')
+
+def dedup_same_dates(body: str) -> str:
+    """Replace 'Month YYYY - Month YYYY' with 'Month YYYY' when both sides are identical."""
+    return _SAME_DATE_RE.sub(r'\1', body)
+
+
+def remove_item_linebreaks(body: str) -> str:
+    """Remove \\ line-continuation breaks inside \\item content to prevent page overflow."""
+    # Replace \\<newline><spaces> inside item text with a single space
+    return re.sub(r'\\\\\n[ \t]*', ' ', body)
+
+
+def normalize_latex_body(body: str) -> str:
+    body = strip_fences(body)
+    body = dedup_same_dates(body)
+    body = remove_item_linebreaks(body)
+    return body
 
 
 def latex_to_text(latex: str) -> str:
@@ -881,7 +871,7 @@ def generate_latex_body(resume_text: str, improvements: str | None = None) -> st
             {
                 "role": "system",
                 "content": (
-                    "You are an expert SWE resume writer using the Jake Gutierrez LaTeX template.\n\n"
+                    "You are an expert SWE resume writer.\n\n"
                     f"Template preamble (defines every available command and its argument signature):\n\n{RESUME_PREAMBLE}\n\n"
                     "Output ONLY \\begin{document} ... \\end{document}. "
                     "Use ONLY commands defined in the preamble above. No additional \\usepackage, no markdown fences."
@@ -890,24 +880,20 @@ def generate_latex_body(resume_text: str, improvements: str | None = None) -> st
             {
                 "role": "user",
                 "content": (
-                    f"Follow this EXACT format — use ONLY these commands:\n\n{RESUME_BODY_EXAMPLE}\n\n"
+                    f"Replicate this EXACT format — same commands, same structure, same spacing. Only replace the content:\n\n{RESUME_BODY_EXAMPLE}\n\n"
                     "---\n\n"
                     f"{task}\n\n"
                     "Rules:\n"
-                    "1. Use ONLY commands from the example above — no \\faPhone, no \\hspace, nothing else.\n"
-                    "2. Strictly 1 page — every bullet must be one tight line.\n"
-                    "3. Every bullet must follow the format: [Action verb] [X — what] by [Y — how/technology] resulting in [Z — measurable impact]. Include Z only when a real metric exists.\n"
-                    "4. Preserve all facts (dates, companies, technologies, metrics).\n"
-                    "5. Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
-                    "6. Output ONLY \\begin{document} ... \\end{document}.\n"
-                    "7. The candidate name in \\begin{center} must be ALL CAPS: \\textbf{\\Huge FIRST LAST} — no \\scshape.\n"
-                    "8. Do NOT wrap links in \\underline — use bare \\href{url}{text} only.\n"
+                    "1. Preserve all facts (dates, companies, technologies, metrics).\n"
+                    "2. Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
+                    "3. Output ONLY \\begin{document} ... \\end{document}. No markdown fences.\n"
+                    "4. STRICT 1-PAGE LIMIT — shorten bullets if needed, never drop an entry.\n"
                     f"{improvement_rules}"
                 ),
             },
         ],
     )
-    return strip_fences(response.choices[0].message.content or "")
+    return dedup_same_dates(strip_fences(response.choices[0].message.content or ""))
 
 
 # ---------------------------------------------------------------------------
@@ -1314,16 +1300,16 @@ async def chat(
         return {"content": new_analysis, "latexBody": None, "newAnalysis": new_analysis}
 
     system_prompt = (
-        "You are an expert career coach and LaTeX resume editor using the Jake Gutierrez template.\n\n"
-        f"Template preamble (defines every available command and its argument signature):\n\n{RESUME_PREAMBLE}\n\n"
+        "You are an expert career coach and LaTeX resume editor.\n\n"
+        f"Template preamble:\n\n{RESUME_PREAMBLE}\n\n"
+        f"Canonical body format — always follow this exact structure when editing:\n\n{RESUME_BODY_EXAMPLE}\n\n"
         "Rules:\n"
         "- When the user asks to modify, improve, rewrite, add, or remove anything on their resume "
         "→ call `update_latex` with the FULL updated body.\n"
         "- When answering questions, giving advice, or explaining without editing → reply in markdown text only.\n"
-        "- Use ONLY commands defined in the preamble above. Never introduce new \\usepackage commands.\n"
+        "- Use ONLY commands defined in the preamble. Never introduce new \\usepackage commands.\n"
         "- Escape special chars: & → \\&, % → \\%, # → \\#, $ → \\$, _ → \\_\n"
-        "- Candidate name in \\begin{center} must be ALL CAPS: \\textbf{\\Huge FIRST LAST} — no \\scshape.\n"
-        "- Do NOT wrap links in \\underline — use bare \\href{url}{text} only.\n\n"
+        "- Output ONLY \\begin{document} ... \\end{document}. No markdown fences.\n\n"
         f"Current LaTeX body:\n```latex\n{latexBody}\n```\n\n"
         f"Original resume text:\n{resumeText}"
     )
@@ -1414,21 +1400,12 @@ def apply_improvements_to_latex(latex_body: str, improvements: str, job_descript
             {
                 "role": "system",
                 "content": (
-                    "You are an expert SWE resume writer using the Jake Gutierrez LaTeX template.\n\n"
-                    f"Template preamble (defines every available command and its argument signature):\n\n{RESUME_PREAMBLE}\n\n"
-                    f"Canonical body format — EXACT argument order you must follow for every command:\n\n{RESUME_BODY_EXAMPLE}\n\n"
-                    "CRITICAL argument order rules (AI models often get these wrong):\n"
-                    "  \\resumeSubheading (Education):   {institution}{date range}/{degree}{GPA or empty}\n"
-                    "  \\resumeSubheading (Experience):  {company}{location}/{title}{date range}\n"
-                    "  \\resumeProjectHeading (with location):    {name}{location}/{technologies}{date range}\n"
-                    "  \\resumeProjectHeading (without location): {name}{}/{technologies}{date range}\n"
-                    "    Date is ALWAYS in arg4. arg2 is location if present, otherwise empty string.\n\n"
-                    "Formatting rules:\n"
-                    "  - Candidate name in \\begin{center} must be ALL CAPS: \\textbf{\\Huge FIRST LAST} — no \\scshape.\n"
-                    "  - Do NOT wrap links in \\underline — use bare \\href{url}{text} only.\n\n"
-                    "Edit the given LaTeX resume body to maximise its ATS score for the target job. "
-                    "Output ONLY \\begin{document} ... \\end{document}. "
-                    "Use ONLY commands defined in the preamble above. No additional \\usepackage, no markdown fences."
+                    "You are an expert SWE resume writer.\n\n"
+                    f"Template preamble:\n\n{RESUME_PREAMBLE}\n\n"
+                    f"Canonical body format — replicate this EXACT structure, same commands, same spacing:\n\n{RESUME_BODY_EXAMPLE}\n\n"
+                    "Edit the given LaTeX body to maximise ATS score. "
+                    "Output ONLY \\begin{document} ... \\end{document}. No additional \\usepackage, no markdown fences. "
+                    "STRICT 1-PAGE LIMIT — shorten bullets if needed, never drop an entry."
                 ),
             },
             {
@@ -1473,7 +1450,7 @@ def apply_improvements_to_latex(latex_body: str, improvements: str, job_descript
             },
         ],
     )
-    return strip_fences(response.choices[0].message.content or "")
+    return dedup_same_dates(strip_fences(response.choices[0].message.content or ""))
 
 
 @app.post("/api/apply-changes")
