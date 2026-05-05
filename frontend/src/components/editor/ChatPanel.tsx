@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Box, Typography, TextField, IconButton, CircularProgress, Avatar, Chip,
+  Box, Typography, TextField, IconButton, CircularProgress, Avatar, Chip, Button,
 } from '@mui/material';
 import {
   Send as SendIcon,
   AutoFixHigh as AiIcon,
   Person as PersonIcon,
   EditNote as EditedIcon,
+  Refresh as ReanalyzeIcon,
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import { sendChatMessage } from '../../api/resumeApi';
@@ -21,10 +22,15 @@ interface Props {
   resumeText: string;
   initialAnalysis: string;
   latexBody: string;
+  jobDescription?: string;
+  refreshedAnalysis?: string;
+  reanalyzing?: boolean;
   onLatexChange: (latex: string) => void;
+  onNewAnalysis: (analysis: string) => void;
+  onReanalyze: () => void;
 }
 
-export default function ChatPanel({ resumeText, initialAnalysis, latexBody, onLatexChange }: Props) {
+export default function ChatPanel({ resumeText, initialAnalysis, latexBody, jobDescription, refreshedAnalysis, reanalyzing, onLatexChange, onNewAnalysis, onReanalyze }: Props) {
   const [messages, setMessages] = useState<Message[]>(() =>
     initialAnalysis ? [{ role: 'assistant', content: initialAnalysis }] : [],
   );
@@ -32,6 +38,7 @@ export default function ChatPanel({ resumeText, initialAnalysis, latexBody, onLa
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const analysisSeeded = useRef(!!initialAnalysis);
+  const prevRefreshedRef = useRef<string | undefined>(undefined);
 
   // Populate the first message if analysis arrives after the component mounts
   useEffect(() => {
@@ -45,22 +52,30 @@ export default function ChatPanel({ resumeText, initialAnalysis, latexBody, onLa
   }, [initialAnalysis]);
 
   useEffect(() => {
+    if (!refreshedAnalysis || refreshedAnalysis === prevRefreshedRef.current) return;
+    prevRefreshedRef.current = refreshedAnalysis;
+    setMessages((prev) => [...prev, { role: 'assistant', content: refreshedAnalysis }]);
+  }, [refreshedAnalysis]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [messages, loading, reanalyzing]);
 
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
     setInput('');
+
     const userMsg: Message = { role: 'user', content: text };
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
     try {
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
-      const res = await sendChatMessage(text, history, resumeText, latexBody);
+      const res = await sendChatMessage(text, history, resumeText, latexBody, jobDescription);
 
       const resumeUpdated = !!res.latexBody;
       if (res.latexBody) onLatexChange(res.latexBody);
+      if (res.newAnalysis) onNewAnalysis(res.newAnalysis);
 
       setMessages((prev) => [...prev, {
         role: 'assistant',
@@ -83,9 +98,22 @@ export default function ChatPanel({ resumeText, initialAnalysis, latexBody, onLa
         <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ letterSpacing: '0.06em' }}>
           AI ASSISTANT
         </Typography>
-        <Typography variant="caption" color="text.disabled" sx={{ ml: 'auto' }}>
-          can edit your resume directly
-        </Typography>
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Button
+            size="small"
+            variant="text"
+            onClick={onReanalyze}
+            disabled={reanalyzing || loading}
+            startIcon={reanalyzing ? <CircularProgress size={11} color="inherit" /> : <ReanalyzeIcon sx={{ fontSize: '13px !important' }} />}
+            sx={{
+              px: 1, height: 26, fontSize: '0.72rem', borderRadius: 1.5,
+              textTransform: 'none', fontWeight: 600, color: '#6b7280',
+              '&:hover': { bgcolor: '#f3f4f6', color: '#111827' },
+            }}
+          >
+            {reanalyzing ? 'Analyzing…' : 'Re-analyze'}
+          </Button>
+        </Box>
       </Box>
 
       {/* Messages */}
@@ -141,14 +169,16 @@ export default function ChatPanel({ resumeText, initialAnalysis, latexBody, onLa
         ))}
 
         {/* Typing indicator */}
-        {loading && (
+        {(loading || reanalyzing) && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Avatar sx={{ width: 26, height: 26, bgcolor: '#4f46e5' }}>
               <AiIcon sx={{ fontSize: 14, color: '#fff' }} />
             </Avatar>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '4px 12px 12px 12px', px: 1.5, py: 1 }}>
               <CircularProgress size={10} thickness={5} sx={{ color: '#9ca3af' }} />
-              <Typography variant="caption" color="text.disabled">Thinking…</Typography>
+              <Typography variant="caption" color="text.disabled">
+                {reanalyzing ? 'Re-analyzing…' : 'Thinking…'}
+              </Typography>
             </Box>
           </Box>
         )}

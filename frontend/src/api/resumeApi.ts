@@ -76,16 +76,18 @@ export async function sendChatMessage(
   history: { role: string; content: string }[],
   resumeText: string,
   latexBody: string,
+  jobDescription = '',
 ) {
   const fd = new FormData();
   fd.append('message', message);
   fd.append('history', JSON.stringify(history));
   fd.append('resumeText', resumeText);
   fd.append('latexBody', latexBody);
+  if (jobDescription) fd.append('jobDescription', jobDescription);
   const res = await fetch('/api/chat', { method: 'POST', body: fd });
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || 'Chat failed');
-  return data as { content: string; latexBody: string | null };
+  return data as { content: string; latexBody: string | null; newAnalysis: string | null };
 }
 
 export async function improveBullet(bullet: string, context: string, jobDescription = '') {
@@ -97,6 +99,16 @@ export async function improveBullet(bullet: string, context: string, jobDescript
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || 'Failed to improve bullet');
   return data as { improved: string };
+}
+
+export async function reanalyzeResume(latexBody: string, jobDescription: string) {
+  const fd = new FormData();
+  fd.append('latexBody', latexBody);
+  fd.append('jobDescription', jobDescription);
+  const res = await fetch('/api/reanalyze', { method: 'POST', body: fd });
+  const data = await res.json();
+  if (!res.ok) throw new Error(apiErrorMessage(data, 'Re-analysis failed'));
+  return data as { analysis: string };
 }
 
 export async function applyChanges(latexBody: string, analysis: string, jobDescription = '') {

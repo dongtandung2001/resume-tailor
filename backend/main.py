@@ -1,3 +1,4 @@
+import concurrent.futures
 import io
 import ipaddress
 import json
@@ -490,20 +491,20 @@ RESUME_PREAMBLE = r"""\documentclass[letterpaper,10pt]{article}
 }
 \newcommand{\resumeSubheading}[4]{
   \vspace{-2pt}\item
-    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
-      \textbf{#1} & #2 \\
+    \begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & \small #2 \\
       \textit{\small#3} & \textit{\small #4} \\
     \end{tabular*}\vspace{-7pt}
 }
 \newcommand{\resumeSubSubheading}[2]{
     \item
-    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+    \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
       \textit{\small#1} & \textit{\small #2} \\
     \end{tabular*}\vspace{-7pt}
 }
 \newcommand{\resumeProjectHeading}[4]{
   \vspace{-2pt}\item
-    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
       \textbf{#1} & \small #2 \\
       \textit{\small#3} & \textit{\small #4} \\
     \end{tabular*}\vspace{-7pt}
@@ -521,11 +522,11 @@ RESUME_BODY_EXAMPLE = r"""
 \begin{document}
 
 \begin{center}
-    \textbf{\Huge \scshape Jake Ryan} \\ \vspace{1pt}
-    \small 123-456-7890 $|$ \href{mailto:jake@su.edu}{\underline{jake@su.edu}} $|$ San Jose, CA, USA $|$
-    \href{https://linkedin.com/in/jake}{\underline{linkedin.com/in/jake}} $|$
-    \href{https://github.com/jake}{\underline{github.com/jake}} $|$
-    \href{https://jakesite.dev}{\underline{jakesite.dev}}
+    \textbf{\Huge JAKE RYAN} \\ \vspace{3pt}
+    \small 123-456-7890 $|$ \href{mailto:jake@su.edu}{jake@su.edu} $|$ San Jose, CA, USA $|$
+    \href{https://linkedin.com/in/jake}{linkedin.com/in/jake} $|$
+    \href{https://github.com/jake}{github.com/jake} $|$
+    \href{https://jakesite.dev}{jakesite.dev}
 \end{center}
 
 \section{EDUCATION}
@@ -580,6 +581,19 @@ RESUME_BODY_EXAMPLE = r"""
 def strip_fences(raw: str) -> str:
     cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", raw.strip())
     return re.sub(r"\n?```$", "", cleaned.strip()).strip()
+
+
+def latex_to_text(latex: str) -> str:
+    """Strip LaTeX markup from a body string, returning readable plain text."""
+    text = re.sub(r'%.*?$', '', latex, flags=re.MULTILINE)
+    text = re.sub(r'\\(?:begin|end)\{[^}]*\}', '', text)
+    for _ in range(4):
+        text = re.sub(r'\\[a-zA-Z]+\*?\{([^{}]*)\}', r'\1 ', text)
+    text = re.sub(r'\\[a-zA-Z]+\*?', ' ', text)
+    text = re.sub(r'[{}]', ' ', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
 
 
 def extract_text(pdf_bytes: bytes) -> str:
@@ -663,8 +677,9 @@ def analyze_resume_standalone(resume_text: str) -> str:
                     "action verb strength, metric/quantification presence, technical specificity. "
                     "Identify the 3 weakest bullets verbatim.\n\n"
                     "## Structural Completeness\n"
-                    "Check for each section (✓/✗): Contact info, Summary, Education, Experience, "
-                    "Projects, Skills section, Dates on all entries.\n\n"
+                    "Check for each section (✓/✗): Contact info, Education, Experience, "
+                    "Projects, Skills section, Dates on all entries. "
+                    "Do NOT check for or penalize a missing Summary/Objective — it is not expected on SWE resumes.\n\n"
                     "## ATS Formatting Signals\n"
                     "Flag any ATS-hostile patterns: non-standard section names, dense skill blocks, "
                     "inconsistent date formats, missing keywords in section headers.\n\n"
@@ -749,7 +764,9 @@ def synthesize_ats_analysis(resume_profile: str, jd_profile: str, resume_text: s
                     "## ATS Compatibility Score\n"
                     "Score 1–100. Ground the score in arithmetic: start from the Standalone Baseline Score "
                     "in the Resume Profile, adjust for keyword coverage (matched / total ATS keywords from JD Profile), "
-                    "and apply penalties for structural issues. Show your working: "
+                    "and apply penalties for structural issues. "
+                    "Do NOT penalize for a missing Summary/Objective/Profile section — SWE resumes do not use them. "
+                    "Show your working: "
                     "e.g. 'Baseline 72 → keyword coverage 8/15 (53%) → -8 pts → structural penalties -5 → final 59'.\n\n"
                     "## Keyword Match Analysis\n"
                     "Use the ATS Keyword Master List from the JD Profile. For EACH keyword, check against "
@@ -777,7 +794,9 @@ def synthesize_ats_analysis(resume_profile: str, jd_profile: str, resume_text: s
                     "Where natural, incorporate missing ATS keywords from the JD.\n\n"
                     "## Section & Format Recommendations\n"
                     "Use Structural Completeness and ATS Formatting Signals from the Resume Profile. "
-                    "Add JD-specific section recommendations where relevant.\n\n"
+                    "Add JD-specific section recommendations where relevant. "
+                    "IMPORTANT: Do NOT recommend adding a Professional Summary, Objective, or Profile section — "
+                    "these are not used on SWE resumes and waste space.\n\n"
                     "## Priority Action List\n"
                     "Numbered list of the top 5 highest-impact changes, ordered by combined impact on "
                     "ATS score and recruiter impression. Cross-reference keyword gaps and bullet quality findings."
@@ -881,6 +900,8 @@ def generate_latex_body(resume_text: str, improvements: str | None = None) -> st
                     "4. Preserve all facts (dates, companies, technologies, metrics).\n"
                     "5. Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
                     "6. Output ONLY \\begin{document} ... \\end{document}.\n"
+                    "7. The candidate name in \\begin{center} must be ALL CAPS: \\textbf{\\Huge FIRST LAST} — no \\scshape.\n"
+                    "8. Do NOT wrap links in \\underline — use bare \\href{url}{text} only.\n"
                     f"{improvement_rules}"
                 ),
             },
@@ -1170,7 +1191,6 @@ async def analyze_resume(
     print(f"[stage0] Extracted {len(resume_text)} chars")
 
     print("[stage1] Profiling resume and JD independently (parallel)...")
-    import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor() as executor:
         f_resume_profile = executor.submit(analyze_resume_standalone, resume_text)
         f_jd_profile     = executor.submit(analyze_jd_standalone, jobDescription)
@@ -1262,17 +1282,36 @@ _UPDATE_LATEX_TOOL = {
 }
 
 
+_REANALYZE_CHAT_RE = re.compile(
+    r're-?analyz|analyz.*again|run.*analys|fresh.*analys|new.*analys|ats.*again|score.*again',
+    re.IGNORECASE,
+)
+
+
 @app.post("/api/chat")
 async def chat(
     message: str = Form(...),
     history: str = Form(...),   # JSON array of {role, content}
     resumeText: str = Form(...),
     latexBody: str = Form(default=""),
+    jobDescription: str = Form(default=""),
 ):
     try:
         history_list = json.loads(history)
     except Exception:
         history_list = []
+
+    # ── Re-analyze intent: run full ATS pipeline and return as chat message ──
+    if _REANALYZE_CHAT_RE.search(message) and jobDescription.strip() and latexBody.strip():
+        print("[chat/reanalyze] Re-analyze intent detected — running analysis pipeline...")
+        resume_text = latex_to_text(latexBody)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            f_r = executor.submit(analyze_resume_standalone, resume_text)
+            f_j = executor.submit(analyze_jd_standalone, jobDescription)
+            resume_profile, jd_profile = f_r.result(), f_j.result()
+        new_analysis = synthesize_ats_analysis(resume_profile, jd_profile, resume_text)
+        print("[chat/reanalyze] Done")
+        return {"content": new_analysis, "latexBody": None, "newAnalysis": new_analysis}
 
     system_prompt = (
         "You are an expert career coach and LaTeX resume editor using the Jake Gutierrez template.\n\n"
@@ -1282,7 +1321,9 @@ async def chat(
         "→ call `update_latex` with the FULL updated body.\n"
         "- When answering questions, giving advice, or explaining without editing → reply in markdown text only.\n"
         "- Use ONLY commands defined in the preamble above. Never introduce new \\usepackage commands.\n"
-        "- Escape special chars: & → \\&, % → \\%, # → \\#, $ → \\$, _ → \\_\n\n"
+        "- Escape special chars: & → \\&, % → \\%, # → \\#, $ → \\$, _ → \\_\n"
+        "- Candidate name in \\begin{center} must be ALL CAPS: \\textbf{\\Huge FIRST LAST} — no \\scshape.\n"
+        "- Do NOT wrap links in \\underline — use bare \\href{url}{text} only.\n\n"
         f"Current LaTeX body:\n```latex\n{latexBody}\n```\n\n"
         f"Original resume text:\n{resumeText}"
     )
@@ -1308,10 +1349,10 @@ async def chat(
             args = json.loads(tool_call.function.arguments)
             new_latex = strip_fences(args.get("latex_body", ""))
             explanation = args.get("explanation", "I've updated your resume.")
-            return {"content": explanation, "latexBody": new_latex}
+            return {"content": explanation, "latexBody": new_latex, "newAnalysis": None}
 
     # ── Plain text response ───────────────────────────────────────────────
-    return {"content": msg.content or "", "latexBody": None}
+    return {"content": msg.content or "", "latexBody": None, "newAnalysis": None}
 
 
 # ---------------------------------------------------------------------------
@@ -1382,6 +1423,9 @@ def apply_improvements_to_latex(latex_body: str, improvements: str, job_descript
                     "  \\resumeProjectHeading (with location):    {name}{location}/{technologies}{date range}\n"
                     "  \\resumeProjectHeading (without location): {name}{}/{technologies}{date range}\n"
                     "    Date is ALWAYS in arg4. arg2 is location if present, otherwise empty string.\n\n"
+                    "Formatting rules:\n"
+                    "  - Candidate name in \\begin{center} must be ALL CAPS: \\textbf{\\Huge FIRST LAST} — no \\scshape.\n"
+                    "  - Do NOT wrap links in \\underline — use bare \\href{url}{text} only.\n\n"
                     "Edit the given LaTeX resume body to maximise its ATS score for the target job. "
                     "Output ONLY \\begin{document} ... \\end{document}. "
                     "Use ONLY commands defined in the preamble above. No additional \\usepackage, no markdown fences."
@@ -1450,6 +1494,35 @@ async def apply_changes(
 
     print(f"[1/1] Done — {page_count} page(s)")
     return {"latexBody": body, "pageCount": page_count}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/reanalyze  — re-run ATS analysis on the current LaTeX body
+# ---------------------------------------------------------------------------
+@app.post("/api/reanalyze")
+async def reanalyze_resume(
+    latexBody: str = Form(...),
+    jobDescription: str = Form(...),
+):
+    if not latexBody.strip():
+        raise HTTPException(status_code=400, detail="latexBody is required")
+    if not jobDescription.strip():
+        raise HTTPException(status_code=400, detail="jobDescription is required")
+
+    resume_text = latex_to_text(latexBody)
+    if len(resume_text.strip()) < 50:
+        raise HTTPException(status_code=422, detail="Could not extract enough text from latexBody")
+
+    print("[reanalyze 1/2] Profiling resume and JD in parallel...")
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        f_r = executor.submit(analyze_resume_standalone, resume_text)
+        f_j = executor.submit(analyze_jd_standalone, jobDescription)
+        resume_profile, jd_profile = f_r.result(), f_j.result()
+
+    print("[reanalyze 2/2] Synthesizing ATS analysis...")
+    analysis = synthesize_ats_analysis(resume_profile, jd_profile, resume_text)
+    print("[reanalyze] Done")
+    return {"analysis": analysis}
 
 
 # ---------------------------------------------------------------------------

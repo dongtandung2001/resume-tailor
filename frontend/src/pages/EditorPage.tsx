@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Box, Typography } from "@mui/material";
-import { compilePdf, applyChanges } from "../api/resumeApi";
+import { compilePdf, applyChanges, reanalyzeResume } from "../api/resumeApi";
 import { generateLatexBody } from "../utils/latexGenerator";
 import { parseLatexBody } from "../utils/latexParser";
 import { usePdfPreview } from "../hooks/usePdfPreview";
@@ -22,7 +22,7 @@ interface Props {
 export default function EditorPage({
   resumeData: initialData,
   resumeText,
-  analysis,
+  analysis: initialAnalysis,
   initialLatexBody,
   jobDescription,
   onReset,
@@ -32,8 +32,11 @@ export default function EditorPage({
   const [latexBody, setLatexBody] = useState(
     () => initialLatexBody ?? generateLatexBody(initialData),
   );
+  const [analysis, setAnalysis] = useState(initialAnalysis);
   const [downloading, setDownloading] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const [refreshedAnalysis, setRefreshedAnalysis] = useState<string | undefined>(undefined);
   const [error, setError] = useState("");
   const { pdfUrl, pageCount, setPageCount, previewLoading, compileError } =
     usePdfPreview(latexBody);
@@ -135,6 +138,20 @@ export default function EditorPage({
       setError(err instanceof Error ? err.message : "Apply failed");
     } finally {
       setApplying(false);
+    }
+  };
+
+  const handleReanalyze = async () => {
+    setReanalyzing(true);
+    setError("");
+    try {
+      const { analysis: newAnalysis } = await reanalyzeResume(latexBody, jobDescription ?? "");
+      setAnalysis(newAnalysis);
+      setRefreshedAnalysis(newAnalysis);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Re-analysis failed");
+    } finally {
+      setReanalyzing(false);
     }
   };
 
@@ -259,9 +276,14 @@ export default function EditorPage({
           <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
             <ChatPanel
               resumeText={resumeText}
-              initialAnalysis={analysis}
+              initialAnalysis={initialAnalysis}
               latexBody={latexBody}
+              jobDescription={jobDescription}
+              refreshedAnalysis={refreshedAnalysis}
+              reanalyzing={reanalyzing}
               onLatexChange={handleAiLatexUpdate}
+              onNewAnalysis={(a) => { setAnalysis(a); setRefreshedAnalysis(a); }}
+              onReanalyze={handleReanalyze}
             />
           </Box>
         </Box>
