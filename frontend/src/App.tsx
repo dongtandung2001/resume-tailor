@@ -23,7 +23,7 @@ function normalizeResumeData(raw: ResumeData): ResumeData {
     },
     education: (raw.education ?? []).map((e) => ({ id: nanoid(), institution: e.institution ?? '', location: e.location ?? '', degree: e.degree ?? '', startDate: e.startDate ?? '', endDate: e.endDate ?? '', gpa: e.gpa ?? '', bullets: e.bullets ?? [] })),
     experience: (raw.experience ?? []).map((e) => ({ id: nanoid(), company: e.company ?? '', title: e.title ?? '', location: e.location ?? '', startDate: e.startDate ?? '', endDate: e.endDate ?? '', bullets: e.bullets ?? [] })),
-    projects: (raw.projects ?? []).map((p) => ({ id: nanoid(), name: p.name ?? '', technologies: p.technologies ?? '', startDate: p.startDate ?? '', endDate: p.endDate ?? '', bullets: p.bullets ?? [] })),
+    projects: (raw.projects ?? []).map((p) => ({ id: nanoid(), name: p.name ?? '', location: p.location ?? '', technologies: p.technologies ?? '', startDate: p.startDate ?? '', endDate: p.endDate ?? '', bullets: p.bullets ?? [] })),
     skills: raw.skills ?? '',
   };
 }

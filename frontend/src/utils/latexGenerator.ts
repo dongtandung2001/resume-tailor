@@ -83,10 +83,10 @@ export function generateLatexBody(data: ResumeData): string {
     lines.push('    \\resumeSubHeadingListStart');
     for (const proj of data.projects) {
       const dateRange = `${esc(proj.startDate)} -- ${esc(proj.endDate)}`;
-      // If location present: line1={name}{location}, line2={tech}{date}
-      // If no location: line1={name}{date}, line2={tech}{}
-      const arg2 = proj.location ? esc(proj.location) : dateRange;
-      const arg4 = proj.location ? dateRange : '';
+      // Date always in arg4 (line 2 right) so a long title never pushes it off the page.
+      // arg2 holds location if present, otherwise empty.
+      const arg2 = proj.location ? esc(proj.location) : '';
+      const arg4 = dateRange;
       lines.push('      \\resumeProjectHeading');
       lines.push(`          {${esc(proj.name)}}{${arg2}}`);
       lines.push(`          {${esc(proj.technologies ?? '')}}{${arg4}}`);

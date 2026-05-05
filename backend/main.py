@@ -446,7 +446,7 @@ DB_PATH = DATA_DIR / "app.db"
 # Jake Gutierrez SWE resume template preamble — injected into LLM system prompts
 # so the model knows exactly which commands are available and their signatures.
 # ---------------------------------------------------------------------------
-RESUME_PREAMBLE = r"""\documentclass[letterpaper,11pt]{article}
+RESUME_PREAMBLE = r"""\documentclass[letterpaper,10pt]{article}
 
 \usepackage{latexsym}
 \usepackage[empty]{fullpage}
@@ -470,8 +470,8 @@ RESUME_PREAMBLE = r"""\documentclass[letterpaper,11pt]{article}
 \addtolength{\oddsidemargin}{-0.5in}
 \addtolength{\evensidemargin}{-0.5in}
 \addtolength{\textwidth}{1in}
-\addtolength{\topmargin}{-.5in}
-\addtolength{\textheight}{1.0in}
+\addtolength{\topmargin}{-.6in}
+\addtolength{\textheight}{1.2in}
 
 \urlstyle{same}
 \raggedbottom
@@ -479,8 +479,9 @@ RESUME_PREAMBLE = r"""\documentclass[letterpaper,11pt]{article}
 \setlength{\tabcolsep}{0in}
 
 \titleformat{\section}{
-  \vspace{-4pt}\bfseries\raggedright\large
-}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+  \bfseries\raggedright\large
+}{}{0em}{}[\color{black}\titlerule]
+\titlespacing*{\section}{0pt}{8pt}{4pt}
 
 \pdfgentounicode=1
 
@@ -503,13 +504,13 @@ RESUME_PREAMBLE = r"""\documentclass[letterpaper,11pt]{article}
 \newcommand{\resumeProjectHeading}[4]{
   \vspace{-2pt}\item
     \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
-      \textbf{#1} & #2 \\
+      \textbf{#1} & \small #2 \\
       \textit{\small#3} & \textit{\small #4} \\
     \end{tabular*}\vspace{-7pt}
 }
 \newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
 \renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
-\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0pt, label={}]}
 \newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
 \newcommand{\resumeItemListStart}{\begin{itemize}}
 \newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
@@ -521,9 +522,10 @@ RESUME_BODY_EXAMPLE = r"""
 
 \begin{center}
     \textbf{\Huge \scshape Jake Ryan} \\ \vspace{1pt}
-    \small 123-456-7890 $|$ \href{mailto:jake@su.edu}{\underline{jake@su.edu}} $|$
+    \small 123-456-7890 $|$ \href{mailto:jake@su.edu}{\underline{jake@su.edu}} $|$ San Jose, CA, USA $|$
     \href{https://linkedin.com/in/jake}{\underline{linkedin.com/in/jake}} $|$
-    \href{https://github.com/jake}{\underline{github.com/jake}}
+    \href{https://github.com/jake}{\underline{github.com/jake}} $|$
+    \href{https://jakesite.dev}{\underline{jakesite.dev}}
 \end{center}
 
 \section{EDUCATION}
@@ -552,6 +554,12 @@ RESUME_BODY_EXAMPLE = r"""
           \resumeItemListStart
             \resumeItem{Developed a full-stack web application using Flask serving a REST API with React as the frontend}
             \resumeItem{Implemented GitHub OAuth to get data from user's repositories}
+          \resumeItemListEnd
+      \resumeProjectHeading
+          {Open Source CLI Tool}{}
+          {Go, Cobra, GitHub Actions}{Jan. 2023 -- Mar. 2023}
+          \resumeItemListStart
+            \resumeItem{Built a command-line tool to automate deployment workflows with zero downtime}
           \resumeItemListEnd
     \resumeSubHeadingListEnd
 
@@ -869,9 +877,10 @@ def generate_latex_body(resume_text: str, improvements: str | None = None) -> st
                     "Rules:\n"
                     "1. Use ONLY commands from the example above — no \\faPhone, no \\hspace, nothing else.\n"
                     "2. Strictly 1 page — every bullet must be one tight line.\n"
-                    "3. Preserve all facts (dates, companies, technologies, metrics).\n"
-                    "4. Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
-                    "5. Output ONLY \\begin{document} ... \\end{document}.\n"
+                    "3. Every bullet must follow the format: [Action verb] [X — what] by [Y — how/technology] resulting in [Z — measurable impact]. Include Z only when a real metric exists.\n"
+                    "4. Preserve all facts (dates, companies, technologies, metrics).\n"
+                    "5. Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
+                    "6. Output ONLY \\begin{document} ... \\end{document}.\n"
                     f"{improvement_rules}"
                 ),
             },
@@ -1331,7 +1340,9 @@ async def improve_bullet(
                 "role": "system",
                 "content": (
                     "You are an expert resume writer. Rewrite the given resume bullet point "
-                    "to be more impactful: use strong action verbs, add measurable results where possible, "
+                    "to be more impactful using the format: [Action verb] [X — what was built/done] "
+                    "by [Y — how/approach/technology] resulting in [Z — measurable outcome or impact]. "
+                    "Use strong action verbs, keep all specific technologies and tool names, "
                     "and keep it to one concise line. Return ONLY the improved bullet text — no explanation, "
                     "no formatting, no leading dash or bullet character."
                 ),
@@ -1364,6 +1375,13 @@ def apply_improvements_to_latex(latex_body: str, improvements: str, job_descript
                 "content": (
                     "You are an expert SWE resume writer using the Jake Gutierrez LaTeX template.\n\n"
                     f"Template preamble (defines every available command and its argument signature):\n\n{RESUME_PREAMBLE}\n\n"
+                    f"Canonical body format — EXACT argument order you must follow for every command:\n\n{RESUME_BODY_EXAMPLE}\n\n"
+                    "CRITICAL argument order rules (AI models often get these wrong):\n"
+                    "  \\resumeSubheading (Education):   {institution}{date range}/{degree}{GPA or empty}\n"
+                    "  \\resumeSubheading (Experience):  {company}{location}/{title}{date range}\n"
+                    "  \\resumeProjectHeading (with location):    {name}{location}/{technologies}{date range}\n"
+                    "  \\resumeProjectHeading (without location): {name}{}/{technologies}{date range}\n"
+                    "    Date is ALWAYS in arg4. arg2 is location if present, otherwise empty string.\n\n"
                     "Edit the given LaTeX resume body to maximise its ATS score for the target job. "
                     "Output ONLY \\begin{document} ... \\end{document}. "
                     "Use ONLY commands defined in the preamble above. No additional \\usepackage, no markdown fences."
@@ -1384,7 +1402,10 @@ def apply_improvements_to_latex(latex_body: str, improvements: str, job_descript
                     "add it to the Skills field. Use the EXACT term from the job description.\n\n"
                     "Step 2 — BULLET REWRITES (apply the precomputed rewrites from the analysis):\n"
                     "  Find '## Bullet Point Rewrites' in the analysis. Apply those EXACT rewrites to the "
-                    "matching bullets. Do not invent your own rewrites unless a bullet has no precomputed version.\n\n"
+                    "matching bullets. Do not invent your own rewrites unless a bullet has no precomputed version.\n"
+                    "  CRITICAL: if the precomputed rewrite drops a specific tool/technology that the ORIGINAL "
+                    "bullet contained (e.g. 'OpenAI GPT-4', 'Langchain', 'Tesseract OCR'), keep the original "
+                    "bullet instead and only apply keyword additions on top of it.\n\n"
                     "Step 3 — WEAVE REMAINING ❌ KEYWORDS INTO EXISTING BULLETS:\n"
                     "  For ❌ keywords that are not pure skills (e.g. domain concepts, methodologies), "
                     "rephrase an existing bullet to incorporate the exact term naturally. "
@@ -1395,7 +1416,12 @@ def apply_improvements_to_latex(latex_body: str, improvements: str, job_descript
                     "Hard constraints:\n"
                     "- STRICT 1-PAGE LIMIT: Every bullet must be one concise line. Never add a new line "
                     "without removing or shortening another. Skills additions are exempt from the page limit.\n"
-                    "- Preserve all facts (dates, companies, technologies, metrics).\n"
+                    "- NO Professional Summary / Profile / Objective section — HR skips it; it wastes space.\n"
+                    "- Every rewritten bullet must follow: [Action verb] [X — what] by [Y — how/technology] resulting in [Z — measurable impact]. Include Z only when a real metric exists; do not fabricate numbers.\n"
+                    "- NEVER remove or replace existing specific technologies, tools, or product names "
+                    "(e.g. 'OpenAI GPT-4', 'yt_dlp', 'Tesseract OCR', 'Langchain', 'Docker Compose'). "
+                    "You may only ADD new keywords alongside them, never substitute generic phrases for them.\n"
+                    "- Preserve all facts (dates, companies, metrics, and every named technology).\n"
                     "- Use ONLY commands defined in the preamble — no new \\usepackage, no \\faPhone.\n"
                     "- Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
                     "- Output ONLY \\begin{document} ... \\end{document}.\n"
