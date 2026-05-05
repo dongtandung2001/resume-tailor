@@ -43,17 +43,14 @@ export function generateLatexBody(data: ResumeData): string {
 
   // ── Education ────────────────────────────────────────────────────────────
   if (data.education.length > 0) {
-    lines.push('\\section{Education}');
+    lines.push('\\section{EDUCATION}');
     lines.push('  \\resumeSubHeadingListStart');
     for (const edu of data.education) {
-      const degreeField = edu.gpa ? `${esc(edu.degree)}` : esc(edu.degree);
-      const dateField = edu.gpa ? `${esc(edu.startDate)} -- ${esc(edu.endDate)}` : `${esc(edu.startDate)} -- ${esc(edu.endDate)}`;
+      const dateField = `${esc(edu.startDate)} -- ${esc(edu.endDate)}`;
+      const gpaField  = edu.gpa ? `GPA: ${esc(edu.gpa)}` : '';
       lines.push('    \\resumeSubheading');
-      lines.push(`      {${esc(edu.institution)}}{${esc(edu.location)}}`);
-      lines.push(`      {${degreeField}}{${dateField}}`);
-      if (edu.gpa) {
-        lines.push(`    \\resumeSubSubheading{GPA: ${esc(edu.gpa)}}{}`);
-      }
+      lines.push(`      {${esc(edu.institution)}}{${dateField}}`);
+      lines.push(`      {${esc(edu.degree)}}{${gpaField}}`);
       if (edu.bullets.length > 0) {
         lines.push('      \\resumeItemListStart');
         for (const b of edu.bullets) lines.push(`        \\resumeItem{${esc(b)}}`);
@@ -65,12 +62,12 @@ export function generateLatexBody(data: ResumeData): string {
 
   // ── Experience ───────────────────────────────────────────────────────────
   if (data.experience.length > 0) {
-    lines.push('\\section{Professional Experience}');
+    lines.push('\\section{PROFESSIONAL EXPERIENCE}');
     lines.push('  \\resumeSubHeadingListStart');
     for (const exp of data.experience) {
       lines.push('    \\resumeSubheading');
-      lines.push(`      {${esc(exp.company)}}{${esc(exp.startDate)} -- ${esc(exp.endDate)}}`);
-      lines.push(`      {${esc(exp.title)}}{${esc(exp.location)}}`);
+      lines.push(`      {${esc(exp.company)}}{${esc(exp.location)}}`);
+      lines.push(`      {${esc(exp.title)}}{${esc(exp.startDate)} -- ${esc(exp.endDate)}}`);
       if (exp.bullets.length > 0) {
         lines.push('      \\resumeItemListStart');
         for (const b of exp.bullets) lines.push(`        \\resumeItem{${esc(b)}}`);
@@ -82,13 +79,17 @@ export function generateLatexBody(data: ResumeData): string {
 
   // ── Projects ─────────────────────────────────────────────────────────────
   if (data.projects.length > 0) {
-    lines.push('\\section{Projects \\& Outside Experience}');
+    lines.push('\\section{PROJECTS \\& OUTSIDE EXPERIENCE}');
     lines.push('    \\resumeSubHeadingListStart');
     for (const proj of data.projects) {
-      const techPart = proj.technologies ? ` $|$ \\emph{${esc(proj.technologies)}}` : '';
       const dateRange = `${esc(proj.startDate)} -- ${esc(proj.endDate)}`;
+      // If location present: line1={name}{location}, line2={tech}{date}
+      // If no location: line1={name}{date}, line2={tech}{}
+      const arg2 = proj.location ? esc(proj.location) : dateRange;
+      const arg4 = proj.location ? dateRange : '';
       lines.push('      \\resumeProjectHeading');
-      lines.push(`          {\\textbf{${esc(proj.name)}}${techPart}}{${dateRange}}`);
+      lines.push(`          {${esc(proj.name)}}{${arg2}}`);
+      lines.push(`          {${esc(proj.technologies ?? '')}}{${arg4}}`);
       if (proj.bullets.length > 0) {
         lines.push('          \\resumeItemListStart');
         for (const b of proj.bullets) lines.push(`            \\resumeItem{${esc(b)}}`);
@@ -100,7 +101,7 @@ export function generateLatexBody(data: ResumeData): string {
 
   // ── Skills ───────────────────────────────────────────────────────────────
   if (data.skills) {
-    lines.push('\\section{Skills}');
+    lines.push('\\section{SKILLS}');
     lines.push(' \\begin{itemize}[leftmargin=0.15in, label={}]');
     lines.push('    \\small{\\item{');
     lines.push(`     \\textbf{Skills}{: ${esc(data.skills)}}`);

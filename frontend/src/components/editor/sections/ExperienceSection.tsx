@@ -6,10 +6,11 @@ import BulletList from './BulletList';
 
 interface Props {
   data: ExperienceEntry[];
+  jobDescription?: string;
   onChange: (data: ExperienceEntry[]) => void;
 }
 
-function EntryCard({ entry, onChange, onDelete }: { entry: ExperienceEntry; onChange: (e: ExperienceEntry) => void; onDelete: () => void }) {
+function EntryCard({ entry, jobDescription, onChange, onDelete }: { entry: ExperienceEntry; jobDescription?: string; onChange: (e: ExperienceEntry) => void; onDelete: () => void }) {
   const set = (key: keyof ExperienceEntry) => (val: string | string[]) => onChange({ ...entry, [key]: val });
 
   return (
@@ -52,13 +53,14 @@ function EntryCard({ entry, onChange, onDelete }: { entry: ExperienceEntry; onCh
       <BulletList
         bullets={entry.bullets}
         context={[entry.title, entry.company].filter(Boolean).join(' at ')}
+        jobDescription={jobDescription}
         onChange={(b) => set('bullets')(b)}
       />
     </Box>
   );
 }
 
-export default function ExperienceSection({ data, onChange }: Props) {
+export default function ExperienceSection({ data, jobDescription, onChange }: Props) {
   const addEntry = () => onChange([...data, { id: nanoid(), company: '', title: '', location: '', startDate: '', endDate: '', bullets: [] }]);
   const updateEntry = (i: number, e: ExperienceEntry) => { const arr = [...data]; arr[i] = e; onChange(arr); };
   const deleteEntry = (i: number) => onChange(data.filter((_, j) => j !== i));
@@ -66,7 +68,7 @@ export default function ExperienceSection({ data, onChange }: Props) {
   return (
     <Box sx={{ p: 2.5 }}>
       {data.map((entry, i) => (
-        <EntryCard key={entry.id} entry={entry} onChange={(e) => updateEntry(i, e)} onDelete={() => deleteEntry(i)} />
+        <EntryCard key={entry.id} entry={entry} jobDescription={jobDescription} onChange={(e) => updateEntry(i, e)} onDelete={() => deleteEntry(i)} />
       ))}
       <Button variant="outlined" size="small" startIcon={<AddIcon />} onClick={addEntry}
         sx={{ borderStyle: 'dashed', color: 'text.secondary', borderColor: '#ccc', fontSize: '0.8rem', width: '100%', py: 1 }}>

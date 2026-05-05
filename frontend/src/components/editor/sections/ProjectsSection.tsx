@@ -6,10 +6,11 @@ import BulletList from './BulletList';
 
 interface Props {
   data: ProjectEntry[];
+  jobDescription?: string;
   onChange: (data: ProjectEntry[]) => void;
 }
 
-function EntryCard({ entry, onChange, onDelete }: { entry: ProjectEntry; onChange: (e: ProjectEntry) => void; onDelete: () => void }) {
+function EntryCard({ entry, jobDescription, onChange, onDelete }: { entry: ProjectEntry; jobDescription?: string; onChange: (e: ProjectEntry) => void; onDelete: () => void }) {
   const set = (key: keyof ProjectEntry) => (val: string | string[]) => onChange({ ...entry, [key]: val });
 
   return (
@@ -29,6 +30,7 @@ function EntryCard({ entry, onChange, onDelete }: { entry: ProjectEntry; onChang
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 0.5 }}>
         {([
           ['name', 'Project Name', 'e.g. My Awesome App'],
+          ['location', 'Location', 'e.g. San Jose, CA (optional)'],
           ['technologies', 'Technologies', 'e.g. React, Node.js, PostgreSQL'],
           ['startDate', 'Start Date', 'e.g. Jan 2024'],
           ['endDate', 'End Date', 'e.g. Mar 2024'],
@@ -51,6 +53,7 @@ function EntryCard({ entry, onChange, onDelete }: { entry: ProjectEntry; onChang
       <BulletList
         bullets={entry.bullets}
         context={entry.name || 'project'}
+        jobDescription={jobDescription}
         placeholder="Describe what you built or accomplished..."
         onChange={(b) => set('bullets')(b)}
       />
@@ -58,15 +61,15 @@ function EntryCard({ entry, onChange, onDelete }: { entry: ProjectEntry; onChang
   );
 }
 
-export default function ProjectsSection({ data, onChange }: Props) {
-  const addEntry = () => onChange([...data, { id: nanoid(), name: '', technologies: '', startDate: '', endDate: '', bullets: [] }]);
+export default function ProjectsSection({ data, jobDescription, onChange }: Props) {
+  const addEntry = () => onChange([...data, { id: nanoid(), name: '', location: '', technologies: '', startDate: '', endDate: '', bullets: [] }]);
   const updateEntry = (i: number, e: ProjectEntry) => { const arr = [...data]; arr[i] = e; onChange(arr); };
   const deleteEntry = (i: number) => onChange(data.filter((_, j) => j !== i));
 
   return (
     <Box sx={{ p: 2.5 }}>
       {data.map((entry, i) => (
-        <EntryCard key={entry.id} entry={entry} onChange={(e) => updateEntry(i, e)} onDelete={() => deleteEntry(i)} />
+        <EntryCard key={entry.id} entry={entry} jobDescription={jobDescription} onChange={(e) => updateEntry(i, e)} onDelete={() => deleteEntry(i)} />
       ))}
       <Button variant="outlined" size="small" startIcon={<AddIcon />} onClick={addEntry}
         sx={{ borderStyle: 'dashed', color: 'text.secondary', borderColor: '#ccc', fontSize: '0.8rem', width: '100%', py: 1 }}>

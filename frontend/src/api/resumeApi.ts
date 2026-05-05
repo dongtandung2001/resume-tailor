@@ -88,20 +88,22 @@ export async function sendChatMessage(
   return data as { content: string; latexBody: string | null };
 }
 
-export async function improveBullet(bullet: string, context: string) {
+export async function improveBullet(bullet: string, context: string, jobDescription = '') {
   const fd = new FormData();
   fd.append('bullet', bullet);
   fd.append('context', context);
+  if (jobDescription) fd.append('jobDescription', jobDescription);
   const res = await fetch('/api/improve-bullet', { method: 'POST', body: fd });
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || 'Failed to improve bullet');
   return data as { improved: string };
 }
 
-export async function applyChanges(resumeText: string, analysis: string) {
+export async function applyChanges(latexBody: string, analysis: string, jobDescription = '') {
   const fd = new FormData();
-  fd.append('resumeText', resumeText);
+  fd.append('latexBody', latexBody);
   fd.append('analysis', analysis);
+  if (jobDescription) fd.append('jobDescription', jobDescription);
   const res = await fetch('/api/apply-changes', { method: 'POST', body: fd });
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || 'Failed to apply changes');

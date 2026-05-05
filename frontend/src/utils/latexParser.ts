@@ -120,21 +120,12 @@ function parseEducation(latex: string): EducationEntry[] {
     const chunk = section.slice(positions[i], positions[i + 1] ?? section.length);
     const args = getArgs(chunk, '\\resumeSubheading'.length, 4);
     if (args.length < 4) continue;
-    const [inst, loc, degree, dateMaybeGpa] = args.map(unesc);
-
-    let gpa = '';
-    const subM = chunk.match(/\\resumeSubSubheading\{([^}]*)\}/);
-    if (subM) {
-      const txt = unesc(subM[1]);
-      gpa = txt.replace(/^GPA:\s*/i, '');
-    }
-    // detect when arg4 IS the GPA instead of a date
-    if (/^[\d.]+$/.test(dateMaybeGpa.trim())) gpa = dateMaybeGpa.trim();
-
-    const dateStr = /GPA/i.test(dateMaybeGpa) || /^[\d.]+$/.test(dateMaybeGpa.trim()) ? '' : dateMaybeGpa;
+    // New format: {institution}{date} / {degree}{GPA or empty}
+    const [inst, dateStr, degree, gpaRaw] = args.map(unesc);
     const [startDate = '', endDate = ''] = dateStr.split(/\s*--\s*/).map(s => s.trim());
+    const gpa = unesc(gpaRaw).replace(/^GPA:\s*/i, '').trim();
 
-    entries.push({ id: nanoid(), institution: inst, location: loc, degree, startDate, endDate, gpa, bullets: extractItems(chunk) });
+    entries.push({ id: nanoid(), institution: inst, location: '', degree, startDate, endDate, gpa, bullets: extractItems(chunk) });
   }
   return entries;
 }
@@ -154,7 +145,8 @@ function parseExperience(latex: string): ExperienceEntry[] {
     const chunk = section.slice(positions[i], positions[i + 1] ?? section.length);
     const args = getArgs(chunk, '\\resumeSubheading'.length, 4);
     if (args.length < 4) continue;
-    const [company, dateRange, title, location] = args.map(unesc);
+    // New format: {company}{location} / {title}{date}
+    const [company, location, title, dateRange] = args.map(unesc);
     const [startDate = '', endDate = ''] = dateRange.split(/\s*--\s*/).map(s => s.trim());
     entries.push({ id: nanoid(), company, title, location, startDate, endDate, bullets: extractItems(chunk) });
   }
@@ -166,7 +158,6 @@ function parseProjects(latex: string): ProjectEntry[] {
   const section = extractSection(
     latex,
     'Projects & Outside Experience',
-    'Projects \\& Outside Experience',
     'Projects',
     'PROJECTS & OUTSIDE EXPERIENCE',
   );
@@ -180,17 +171,22 @@ function parseProjects(latex: string): ProjectEntry[] {
 
   for (let i = 0; i < positions.length; i++) {
     const chunk = section.slice(positions[i], positions[i + 1] ?? section.length);
-    const args = getArgs(chunk, '\\resumeProjectHeading'.length, 2);
+    const args = getArgs(chunk, '\\resumeProjectHeading'.length, 4);
     if (args.length < 2) continue;
-    const [heading, dateRange] = args;
+    const [nameRaw, arg2Raw, techRaw = '', arg4Raw = ''] = args;
 
-    const nameM  = heading.match(/\\textbf\{([^}]+)\}/);
-    const techM  = heading.match(/\\emph\{([^}]+)\}/);
-    const name   = unesc(nameM?.[1] ?? heading);
-    const technologies = unesc(techM?.[1] ?? '');
-    const [startDate = '', endDate = ''] = unesc(dateRange).split(/\s*--\s*/).map(s => s.trim());
+    const name = unesc(nameRaw);
+    const technologies = unesc(techRaw);
 
-    entries.push({ id: nanoid(), name, technologies, startDate, endDate, bullets: extractItems(chunk) });
+    // If arg4 is non-empty → arg2 is location, arg4 is date range
+    // If arg4 is empty     → arg2 is date range, no location
+    const arg4 = unesc(arg4Raw).trim();
+    const arg2 = unesc(arg2Raw).trim();
+    const location   = arg4 ? arg2 : '';
+    const dateStr    = arg4 ? arg4 : arg2;
+    const [startDate = '', endDate = ''] = dateStr.split(/\s*--\s*/).map(s => s.trim());
+
+    entries.push({ id: nanoid(), name, location, technologies, startDate, endDate, bullets: extractItems(chunk) });
   }
   return entries;
 }

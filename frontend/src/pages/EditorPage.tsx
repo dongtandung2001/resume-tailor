@@ -15,6 +15,7 @@ interface Props {
   resumeText: string;
   analysis: string;
   initialLatexBody?: string;
+  jobDescription?: string;
   onReset: () => void;
 }
 
@@ -23,6 +24,7 @@ export default function EditorPage({
   resumeText,
   analysis,
   initialLatexBody,
+  jobDescription,
   onReset,
 }: Props) {
   const [activeTab, setActiveTab] = useState(0);
@@ -39,12 +41,18 @@ export default function EditorPage({
   // ── Bidirectional sync guards ──────────────────────────────────────────
   // Prevents the form→latex effect from firing when latex was the edit source
   const fromLatexRef = useRef(false);
+  // Skip the very first effect run so initialLatexBody is not overwritten on mount
+  const isFirstDataRender = useRef(true);
   const parseTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
 
-  // Form → LaTeX (skip when data was just set from a latex parse)
+  // Form → LaTeX (skip when data was just set from a latex parse, or on first mount)
   useEffect(() => {
+    if (isFirstDataRender.current) {
+      isFirstDataRender.current = false;
+      return;
+    }
     if (fromLatexRef.current) {
       fromLatexRef.current = false;
       return;
@@ -69,14 +77,12 @@ export default function EditorPage({
 
   // AI agent returned new latex → apply immediately (no debounce)
   const handleAiLatexUpdate = (newLatex: string) => {
+    // Cancel any pending debounce so it doesn't overwrite the updated data
+    clearTimeout(parseTimerRef.current);
     setLatexBody(newLatex);
-    try {
-      const parsed = parseLatexBody(newLatex);
-      fromLatexRef.current = true;
-      setData(parsed);
-    } catch {
-      /* keep form as-is if parse fails */
-    }
+    const parsed = parseLatexBody(newLatex);
+    fromLatexRef.current = true;
+    setData(parsed);
   };
 
   // ── Horizontal split (left % of total width) ──────────────────────────
@@ -119,8 +125,9 @@ export default function EditorPage({
     setError("");
     try {
       const { latexBody: improved, pageCount: count } = await applyChanges(
-        resumeText,
+        latexBody,
         analysis,
+        jobDescription,
       );
       handleAiLatexUpdate(improved);
       setPageCount(count);
@@ -222,6 +229,7 @@ export default function EditorPage({
               <ResumeEditorPanel
                 data={data}
                 latexBody={latexBody}
+                jobDescription={jobDescription}
                 onDataChange={setData}
                 onLatexChange={handleLatexChange}
               />

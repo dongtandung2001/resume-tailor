@@ -8,6 +8,7 @@ import { improveBullet } from '../../../api/resumeApi';
 interface Props {
   bullets: string[];
   context?: string;
+  jobDescription?: string;
   placeholder?: string;
   label?: string;
   onChange: (bullets: string[]) => void;
@@ -16,6 +17,7 @@ interface Props {
 export default function BulletList({
   bullets,
   context = '',
+  jobDescription = '',
   placeholder = 'Describe your achievement with measurable impact...',
   label = 'Bullet Points',
   onChange,
@@ -27,7 +29,7 @@ export default function BulletList({
     if (!text || improvingIdx !== null) return;
     setImprovingIdx(i);
     try {
-      const { improved } = await improveBullet(text, context);
+      const { improved } = await improveBullet(text, context, jobDescription);
       const arr = [...bullets];
       arr[i] = improved;
       onChange(arr);

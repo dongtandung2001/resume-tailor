@@ -255,6 +255,7 @@ export default function App() {
           resumeText={resumeText}
           analysis={analysis}
           initialLatexBody={initialLatexBody ?? undefined}
+          jobDescription={jobDescription}
           onReset={handleReset}
         />
       ) : null}

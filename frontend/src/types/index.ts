@@ -47,6 +47,7 @@ export interface ExperienceEntry {
 export interface ProjectEntry {
   id: string;
   name: string;
+  location: string;
   technologies: string;
   startDate: string;
   endDate: string;

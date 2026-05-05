@@ -53,7 +53,6 @@ function EntryCard({ entry, onChange, onDelete }: { entry: EducationEntry; onCha
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 1.5 }}>
         {([
           ['institution', 'Institution', 'e.g. Stanford University'],
-          ['location', 'Location', 'e.g. Stanford, CA'],
           ['degree', 'Degree / Field', 'e.g. B.S. Computer Science'],
           ['gpa', 'GPA', 'e.g. 3.8'],
           ['startDate', 'Start Date', 'e.g. Aug 2020'],

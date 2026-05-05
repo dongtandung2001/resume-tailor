@@ -443,7 +443,8 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 DB_PATH = DATA_DIR / "app.db"
 
 # ---------------------------------------------------------------------------
-# Jake Gutierrez SWE resume template preamble (fixed — never sent to LLM)
+# Jake Gutierrez SWE resume template preamble — injected into LLM system prompts
+# so the model knows exactly which commands are available and their signatures.
 # ---------------------------------------------------------------------------
 RESUME_PREAMBLE = r"""\documentclass[letterpaper,11pt]{article}
 
@@ -478,7 +479,7 @@ RESUME_PREAMBLE = r"""\documentclass[letterpaper,11pt]{article}
 \setlength{\tabcolsep}{0in}
 
 \titleformat{\section}{
-  \vspace{-4pt}\scshape\raggedright\large
+  \vspace{-4pt}\bfseries\raggedright\large
 }{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
 
 \pdfgentounicode=1
@@ -499,10 +500,11 @@ RESUME_PREAMBLE = r"""\documentclass[letterpaper,11pt]{article}
       \textit{\small#1} & \textit{\small #2} \\
     \end{tabular*}\vspace{-7pt}
 }
-\newcommand{\resumeProjectHeading}[2]{
-    \item
-    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
-      \small#1 & #2 \\
+\newcommand{\resumeProjectHeading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
     \end{tabular*}\vspace{-7pt}
 }
 \newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
@@ -524,41 +526,39 @@ RESUME_BODY_EXAMPLE = r"""
     \href{https://github.com/jake}{\underline{github.com/jake}}
 \end{center}
 
-\section{Education}
+\section{EDUCATION}
   \resumeSubHeadingListStart
     \resumeSubheading
-      {Southwestern University}{Georgetown, TX}
-      {Bachelor of Arts in Computer Science, Minor in Business}{Aug. 2018 -- May 2021}
+      {Southwestern University}{Aug. 2018 -- May 2021}
+      {Bachelor of Arts in Computer Science, Minor in Business}{}
   \resumeSubHeadingListEnd
 
-\section{Professional Experience}
+\section{PROFESSIONAL EXPERIENCE}
   \resumeSubHeadingListStart
     \resumeSubheading
-      {Texas A\&M University}{June 2020 -- Present}
-      {Undergraduate Research Assistant}{College Station, TX}
+      {Texas A\&M University}{College Station, TX}
+      {Undergraduate Research Assistant}{June 2020 -- Present}
       \resumeItemListStart
         \resumeItem{Developed a REST API using FastAPI and PostgreSQL to store data from learning management systems}
         \resumeItem{Developed a full-stack web application using Flask, React, PostgreSQL and Docker}
       \resumeItemListEnd
   \resumeSubHeadingListEnd
 
-\section{Projects}
+\section{PROJECTS \& OUTSIDE EXPERIENCE}
     \resumeSubHeadingListStart
       \resumeProjectHeading
-          {\textbf{Gitlytics} $|$ \emph{Python, Flask, React, PostgreSQL, Docker}}{June 2020 -- Present}
+          {Gitlytics}{San Francisco, CA}
+          {Python, Flask, React, PostgreSQL, Docker}{June 2020 -- Present}
           \resumeItemListStart
             \resumeItem{Developed a full-stack web application using Flask serving a REST API with React as the frontend}
             \resumeItem{Implemented GitHub OAuth to get data from user's repositories}
           \resumeItemListEnd
     \resumeSubHeadingListEnd
 
-\section{Technical Skills}
+\section{SKILLS}
  \begin{itemize}[leftmargin=0.15in, label={}]
     \small{\item{
-     \textbf{Languages}{: Java, Python, C/C++, SQL (Postgres), JavaScript, HTML/CSS} \\
-     \textbf{Frameworks}{: React, Node.js, Flask, FastAPI} \\
-     \textbf{Developer Tools}{: Git, Docker, Google Cloud Platform, VS Code} \\
-     \textbf{Libraries}{: pandas, NumPy, Matplotlib}
+     \textbf{Skills}{: Java, Python, C/C++, SQL, JavaScript, HTML/CSS, React, Node.js, Flask, Git, Docker}
     }}
  \end{itemize}
 
@@ -802,7 +802,7 @@ def extract_structured_data(resume_text: str) -> dict:
                     '  "header": { "name": "", "phone": "", "email": "", "location": "", "linkedin": "", "github": "", "website": "" },\n'
                     '  "education": [ { "institution": "", "location": "", "degree": "", "startDate": "", "endDate": "", "gpa": "", "bullets": [] } ],\n'
                     '  "experience": [ { "company": "", "title": "", "location": "", "startDate": "", "endDate": "", "bullets": [] } ],\n'
-                    '  "projects": [ { "name": "", "technologies": "", "startDate": "", "endDate": "", "bullets": [] } ],\n'
+                    '  "projects": [ { "name": "", "location": "", "technologies": "", "startDate": "", "endDate": "", "bullets": [] } ],\n'
                     '  "skills": ""\n'
                     "}\n\n"
                     "Rules:\n"
@@ -854,9 +854,10 @@ def generate_latex_body(resume_text: str, improvements: str | None = None) -> st
             {
                 "role": "system",
                 "content": (
-                    "You are an expert SWE resume writer using the Jake Gutierrez LaTeX template. "
+                    "You are an expert SWE resume writer using the Jake Gutierrez LaTeX template.\n\n"
+                    f"Template preamble (defines every available command and its argument signature):\n\n{RESUME_PREAMBLE}\n\n"
                     "Output ONLY \\begin{document} ... \\end{document}. "
-                    "Use ONLY commands shown in the example. No \\usepackage, no markdown fences."
+                    "Use ONLY commands defined in the preamble above. No additional \\usepackage, no markdown fences."
                 ),
             },
             {
@@ -1171,7 +1172,7 @@ async def analyze_resume(
     print("[stage2] Synthesizing ATS analysis + generating LaTeX + extracting data (parallel)...")
     with concurrent.futures.ThreadPoolExecutor() as executor:
         f_analysis  = executor.submit(synthesize_ats_analysis, resume_profile, jd_profile, resume_text)
-        f_latex     = executor.submit(generate_latex_body, resume_text, resume_profile)
+        f_latex     = executor.submit(generate_latex_body, resume_text)
         f_struct    = executor.submit(extract_structured_data, resume_text)
         analysis    = f_analysis.result()
         latex_body  = f_latex.result()
@@ -1266,11 +1267,12 @@ async def chat(
 
     system_prompt = (
         "You are an expert career coach and LaTeX resume editor using the Jake Gutierrez template.\n\n"
+        f"Template preamble (defines every available command and its argument signature):\n\n{RESUME_PREAMBLE}\n\n"
         "Rules:\n"
         "- When the user asks to modify, improve, rewrite, add, or remove anything on their resume "
         "→ call `update_latex` with the FULL updated body.\n"
         "- When answering questions, giving advice, or explaining without editing → reply in markdown text only.\n"
-        "- Keep all LaTeX commands from the original template. Never introduce new \\usepackage commands.\n"
+        "- Use ONLY commands defined in the preamble above. Never introduce new \\usepackage commands.\n"
         "- Escape special chars: & → \\&, % → \\%, # → \\#, $ → \\$, _ → \\_\n\n"
         f"Current LaTeX body:\n```latex\n{latexBody}\n```\n\n"
         f"Original resume text:\n{resumeText}"
@@ -1310,11 +1312,16 @@ async def chat(
 async def improve_bullet(
     bullet: str = Form(...),
     context: str = Form(default=""),
+    jobDescription: str = Form(default=""),
 ):
     if not bullet.strip():
         raise HTTPException(status_code=400, detail="bullet is required")
 
     ctx_hint = f" for someone who is '{context}'" if context.strip() else ""
+    jd_block = (
+        f"\n\nTarget job description (tailor the bullet to match its keywords and tone):\n{jobDescription.strip()}"
+        if jobDescription.strip() else ""
+    )
 
     response = deepseek.chat.completions.create(
         model="deepseek-chat",
@@ -1331,7 +1338,7 @@ async def improve_bullet(
             },
             {
                 "role": "user",
-                "content": f"Improve this bullet point{ctx_hint}:\n\n{bullet}",
+                "content": f"Improve this bullet point{ctx_hint}:\n\n{bullet}{jd_block}",
             },
         ],
     )
@@ -1340,18 +1347,76 @@ async def improve_bullet(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/apply-changes  — generate improved LaTeX body (1-page enforced)
+# POST /api/apply-changes  — apply ATS recommendations to the current LaTeX body
 # ---------------------------------------------------------------------------
+def apply_improvements_to_latex(latex_body: str, improvements: str, job_description: str = "") -> str:
+    """Apply ATS analysis recommendations directly to the current LaTeX body."""
+    jd_block = (
+        f"Target job description (use EXACT terminology from this — ATS matches strings, not synonyms):\n\n{job_description.strip()}\n\n---\n\n"
+        if job_description.strip() else ""
+    )
+    response = deepseek.chat.completions.create(
+        model="deepseek-chat",
+        max_tokens=4096,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert SWE resume writer using the Jake Gutierrez LaTeX template.\n\n"
+                    f"Template preamble (defines every available command and its argument signature):\n\n{RESUME_PREAMBLE}\n\n"
+                    "Edit the given LaTeX resume body to maximise its ATS score for the target job. "
+                    "Output ONLY \\begin{document} ... \\end{document}. "
+                    "Use ONLY commands defined in the preamble above. No additional \\usepackage, no markdown fences."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"{jd_block}"
+                    f"Current LaTeX resume body:\n\n{latex_body}\n\n"
+                    "---\n\n"
+                    f"ATS Analysis & Recommended Improvements:\n\n{improvements}\n\n"
+                    "---\n\n"
+                    "INSTRUCTIONS — apply in this order:\n\n"
+                    "Step 1 — SKILLS SECTION (zero space cost, highest ATS impact):\n"
+                    "  Find '## Keyword Match Analysis' in the analysis above. For every ❌ missing keyword "
+                    "that is a skill, tool, language, or framework the candidate can honestly claim, "
+                    "add it to the Skills field. Use the EXACT term from the job description.\n\n"
+                    "Step 2 — BULLET REWRITES (apply the precomputed rewrites from the analysis):\n"
+                    "  Find '## Bullet Point Rewrites' in the analysis. Apply those EXACT rewrites to the "
+                    "matching bullets. Do not invent your own rewrites unless a bullet has no precomputed version.\n\n"
+                    "Step 3 — WEAVE REMAINING ❌ KEYWORDS INTO EXISTING BULLETS:\n"
+                    "  For ❌ keywords that are not pure skills (e.g. domain concepts, methodologies), "
+                    "rephrase an existing bullet to incorporate the exact term naturally. "
+                    "Shorten the bullet to keep it one tight line.\n\n"
+                    "Step 4 — PRIORITY ACTION LIST:\n"
+                    "  Find '## Priority Action List' in the analysis. Apply any remaining items not "
+                    "already covered by Steps 1–3.\n\n"
+                    "Hard constraints:\n"
+                    "- STRICT 1-PAGE LIMIT: Every bullet must be one concise line. Never add a new line "
+                    "without removing or shortening another. Skills additions are exempt from the page limit.\n"
+                    "- Preserve all facts (dates, companies, technologies, metrics).\n"
+                    "- Use ONLY commands defined in the preamble — no new \\usepackage, no \\faPhone.\n"
+                    "- Escape special chars: & → \\&,  % → \\%,  # → \\#,  $ → \\$,  _ → \\_\n"
+                    "- Output ONLY \\begin{document} ... \\end{document}.\n"
+                ),
+            },
+        ],
+    )
+    return strip_fences(response.choices[0].message.content or "")
+
+
 @app.post("/api/apply-changes")
 async def apply_changes(
-    resumeText: str = Form(...),
+    latexBody: str = Form(...),
     analysis: str = Form(...),
+    jobDescription: str = Form(default=""),
 ):
-    if not resumeText.strip() or not analysis.strip():
-        raise HTTPException(status_code=400, detail="resumeText and analysis are required")
+    if not latexBody.strip() or not analysis.strip():
+        raise HTTPException(status_code=400, detail="latexBody and analysis are required")
 
-    print("[1/1] Generating improved LaTeX body (1-page guided)...")
-    body = generate_latex_body(resumeText, improvements=analysis)
+    print("[1/1] Applying ATS improvements to current LaTeX body (1-page enforced)...")
+    body = apply_improvements_to_latex(latexBody, improvements=analysis, job_description=jobDescription)
 
     pdf_bytes, page_count, error = try_compile_latex(RESUME_PREAMBLE + "\n" + body)
     if pdf_bytes is None:

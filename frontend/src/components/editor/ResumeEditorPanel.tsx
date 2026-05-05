@@ -35,11 +35,12 @@ const SECTIONS: SectionDef[] = [
 interface Props {
   data: ResumeData;
   latexBody: string;
+  jobDescription?: string;
   onDataChange: (data: ResumeData) => void;
   onLatexChange: (latex: string) => void;
 }
 
-export default function ResumeEditorPanel({ data, latexBody, onDataChange, onLatexChange }: Props) {
+export default function ResumeEditorPanel({ data, latexBody, jobDescription, onDataChange, onLatexChange }: Props) {
   const [mode, setMode] = useState<'form' | 'latex'>('form');
   const [openSection, setOpenSection] = useState<string | null>('header');
 
@@ -107,8 +108,8 @@ export default function ResumeEditorPanel({ data, latexBody, onDataChange, onLat
                   <Box sx={{ bgcolor: '#fff', borderTop: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>
                     {sec.id === 'header'     && <HeaderSection     data={data.header}     onChange={h  => onDataChange({ ...data, header:     h  })} />}
                     {sec.id === 'education'  && <EducationSection  data={data.education}  onChange={ed => onDataChange({ ...data, education:  ed })} />}
-                    {sec.id === 'experience' && <ExperienceSection data={data.experience} onChange={ex => onDataChange({ ...data, experience: ex })} />}
-                    {sec.id === 'projects'   && <ProjectsSection   data={data.projects}   onChange={pr => onDataChange({ ...data, projects:   pr })} />}
+                    {sec.id === 'experience' && <ExperienceSection data={data.experience} jobDescription={jobDescription} onChange={ex => onDataChange({ ...data, experience: ex })} />}
+                    {sec.id === 'projects'   && <ProjectsSection   data={data.projects}   jobDescription={jobDescription} onChange={pr => onDataChange({ ...data, projects:   pr })} />}
                     {sec.id === 'skills'     && <SkillsSection     data={data.skills}     onChange={sk => onDataChange({ ...data, skills:     sk })} />}
                   </Box>
                 </Collapse>
