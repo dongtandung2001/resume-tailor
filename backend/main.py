@@ -681,7 +681,7 @@ def analyze_resume_standalone(resume_text: str) -> str:
         ],
     )
     msg = response.choices[0].message
-    return msg.content or getattr(msg, "reasoning_content", None) or ""
+    return msg.content or ""
 
 
 def analyze_jd_standalone(job_description: str) -> str:
@@ -795,7 +795,7 @@ def synthesize_ats_analysis(resume_profile: str, jd_profile: str, resume_text: s
         ],
     )
     msg = response.choices[0].message
-    return msg.content or getattr(msg, "reasoning_content", None) or ""
+    return msg.content or ""
 
 
 def extract_structured_data(resume_text: str) -> dict:
