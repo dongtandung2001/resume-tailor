@@ -5,7 +5,9 @@
       "Bash(npx tsc:*)",
       "Bash(npm install:*)",
       "Bash(npm run:*)",
-      "Bash(node -e \"console.log\\(require\\(''./node_modules/react-pdf/package.json''\\).version\\)\")"
+      "Bash(node -e \"console.log\\(require\\(''./node_modules/react-pdf/package.json''\\).version\\)\")",
+      "Bash(Get-ChildItem -Force)",
+      "Bash(Select-Object Name)"
     ]
   }
 }

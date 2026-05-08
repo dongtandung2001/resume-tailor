@@ -30,6 +30,7 @@ interface Props {
   onRegister: (name: string, email: string, password: string) => Promise<void>;
   onLogout: () => Promise<void>;
   onSaveResume: () => Promise<void>;
+  onOpenSavedResume: (resumeId: number) => Promise<void>;
   onSavedResumeChange: (id: number | null) => void;
   onFileChange: (file: File | null) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -45,7 +46,7 @@ export default function UploadPage(props: Props) {
   const {
     currentUser, authLoading, savedResumes, selectedSavedResumeId,
   resumeFile, jobDescription, isDragOver, loading, urlFetchLoading, error,
-    onLogin, onRegister, onLogout, onSaveResume, onSavedResumeChange,
+    onLogin, onRegister, onLogout, onSaveResume, onOpenSavedResume, onSavedResumeChange,
   onFileChange, onDrop, onDragOver, onDragLeave,
     onJobDescriptionChange, onFetchJobFromUrl, onAnalyze, onPasteLatex
   } = props;
@@ -223,6 +224,23 @@ export default function UploadPage(props: Props) {
                   ? 'Choose a saved resume to skip re-uploading, or leave this empty to use a new PDF.'
                   : 'Your saved resumes will show up here after you analyze an uploaded PDF while logged in.'}
               </Typography>
+
+              {selectedSavedResumeId && (
+                <Box mt={2}>
+                  <Button
+                    variant="outlined"
+                    startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <SavedIcon />}
+                    disabled={loading}
+                    onClick={() => onOpenSavedResume(selectedSavedResumeId)}
+                    sx={{ textTransform: 'none', fontWeight: 600 }}
+                  >
+                    {loading ? 'Opening…' : 'Open in Editor'}
+                  </Button>
+                  <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+                    Opens without analysis — add a job description inside the editor
+                  </Typography>
+                </Box>
+              )}
             </Box>
           )}
         </Paper>
@@ -367,7 +385,7 @@ export default function UploadPage(props: Props) {
                 size="large"
                 variant="contained"
                 onClick={onAnalyze}
-                disabled={loading || urlFetchLoading || !resumeFile || !jobDescription.trim()}
+                disabled={loading || urlFetchLoading || (!resumeFile && !selectedSavedResumeId) || !jobDescription.trim()}
                 startIcon={
                   loading
                     ? <CircularProgress size={18} color="inherit" />

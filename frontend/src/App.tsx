@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { theme } from './theme';
 import { type View, type ResumeData, type SavedResume, type User } from './types';
-import { analyzeResume, fetchJobDescriptionFromUrl, fetchCurrentUser, fetchSavedResumes, loginUser, logoutUser, registerUser, saveResumeFile } from './api/resumeApi';
+import { analyzeResume, fetchJobDescriptionFromUrl, fetchCurrentUser, fetchSavedResumes, loginUser, logoutUser, registerUser, saveResumeFile, openSavedResume } from './api/resumeApi';
 import { nanoid } from './utils/nanoid';
 import { parseLatexBody } from './utils/latexParser';
 import UploadPage from './pages/UploadPage';
@@ -217,6 +217,25 @@ export default function App() {
     setError('');
   }, [authToken, loadSavedResumes, resumeFile]);
 
+  const handleOpenSavedResume = useCallback(async (resumeId: number) => {
+    if (!authToken) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await openSavedResume(resumeId, authToken);
+      setResumeText(data.resumeText ?? '');
+      setInitialLatexBody(data.latexBody ?? null);
+      setResumeData(normalizeResumeData(data.resumeData ?? {} as ResumeData));
+      setAnalysis('');
+      setJobDescription('');
+      setView('editor');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to open resume');
+    } finally {
+      setLoading(false);
+    }
+  }, [authToken]);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -236,6 +255,7 @@ export default function App() {
           onRegister={handleRegister}
           onLogout={handleLogout}
           onSaveResume={handleSaveResume}
+          onOpenSavedResume={handleOpenSavedResume}
           onSavedResumeChange={(id) => {
             setSavedResumeId(id);
             if (id) setResumeFile(null);
@@ -256,6 +276,7 @@ export default function App() {
           analysis={analysis}
           initialLatexBody={initialLatexBody ?? undefined}
           jobDescription={jobDescription}
+          authToken={authToken}
           onReset={handleReset}
         />
       ) : null}

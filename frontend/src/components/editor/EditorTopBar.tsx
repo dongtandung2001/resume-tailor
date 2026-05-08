@@ -9,6 +9,8 @@ import {
   CheckCircle as CheckIcon,
   WarningAmber as WarnIcon,
   AutoAwesome as ApplyIcon,
+  BookmarkAdd as SaveIcon,
+  Work as WorkIcon,
 } from '@mui/icons-material';
 
 interface Props {
@@ -16,17 +18,22 @@ interface Props {
   pageCount: number;
   downloading: boolean;
   applying: boolean;
+  saving: boolean;
   hasAnalysis: boolean;
+  isAuthenticated: boolean;
+  jobDescription?: string;
   error: string;
   onReset: () => void;
   onTabChange: (tab: number) => void;
   onDownload: () => void;
   onApplyChanges: () => void;
+  onSave: () => void;
+  onOpenJdDialog: () => void;
 }
 
 export default function EditorTopBar({
-  activeTab, pageCount, downloading, applying, hasAnalysis, error,
-  onReset, onTabChange, onDownload, onApplyChanges,
+  activeTab, pageCount, downloading, applying, saving, hasAnalysis, isAuthenticated, jobDescription, error,
+  onReset, onTabChange, onDownload, onApplyChanges, onSave, onOpenJdDialog,
 }: Props) {
   return (
     <Box sx={{
@@ -78,6 +85,24 @@ export default function EditorTopBar({
         />
       )}
 
+      <Tooltip title={jobDescription ? 'Edit job description' : 'Add job description'}>
+        <Button
+          size="small" variant="outlined"
+          onClick={onOpenJdDialog}
+          startIcon={<WorkIcon sx={{ fontSize: '14px !important' }} />}
+          sx={{
+            px: 1.5, height: 32, fontSize: '0.78rem', borderRadius: 1.5,
+            textTransform: 'none', fontWeight: 600,
+            borderColor: jobDescription ? '#7c3aed' : '#d1d5db',
+            color: jobDescription ? '#7c3aed' : '#9ca3af',
+            bgcolor: jobDescription ? '#f5f3ff' : 'transparent',
+            '&:hover': { bgcolor: jobDescription ? '#ede9fe' : '#f3f4f6', borderColor: jobDescription ? '#6d28d9' : '#9ca3af' },
+          }}
+        >
+          {jobDescription ? 'JD Set' : 'Add JD'}
+        </Button>
+      </Tooltip>
+
       {hasAnalysis && (
         <Tooltip title="Re-generate resume applying all AI suggestions (enforces 1 page)">
           <span>
@@ -98,6 +123,24 @@ export default function EditorTopBar({
           </span>
         </Tooltip>
       )}
+
+      <Tooltip title={isAuthenticated ? 'Save resume to your account' : 'Log in to save resume'}>
+        <span>
+          <Button
+            size="small" variant="outlined"
+            onClick={onSave} disabled={saving || downloading || applying || !isAuthenticated}
+            startIcon={saving ? <CircularProgress size={13} color="inherit" /> : <SaveIcon sx={{ fontSize: '15px !important' }} />}
+            sx={{
+              px: 2, height: 32, fontSize: '0.8rem', borderRadius: 1.5, textTransform: 'none',
+              borderColor: '#059669', color: '#059669',
+              '&:hover': { bgcolor: '#ecfdf5', borderColor: '#047857' },
+              '&.Mui-disabled': { borderColor: '#d1d5db', color: '#9ca3af' },
+            }}
+          >
+            {saving ? 'Saving…' : 'Save Resume'}
+          </Button>
+        </span>
+      </Tooltip>
 
       <Button
         size="small" variant="contained"

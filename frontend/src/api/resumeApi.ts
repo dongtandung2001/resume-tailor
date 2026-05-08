@@ -185,3 +185,20 @@ export async function saveResumeFile(resume: File, token: string) {
   if (!res.ok) throw new Error(data.detail || 'Failed to save resume');
   return data as { id: number; filename: string };
 }
+
+export async function saveEditorResume(latexBody: string, resumeName: string, token: string) {
+  const { blob } = await compilePdf(latexBody);
+  const filename = `${resumeName}_RESUME.pdf`;
+  const file = new File([blob], filename, { type: 'application/pdf' });
+  return saveResumeFile(file, token);
+}
+
+export async function openSavedResume(resumeId: number, token: string) {
+  const res = await fetch(`/api/resumes/${resumeId}/open`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to open resume'));
+  return data as { latexBody: string; resumeText: string; resumeData: ResumeData };
+}

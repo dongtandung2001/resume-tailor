@@ -1,3 +1,4 @@
+import asyncio
 import concurrent.futures
 import io
 import ipaddress
@@ -159,12 +160,12 @@ def _extract_jd_with_llm(text: str) -> str:
     Use LLM to isolate the job description from noisy scraped page text.
     Falls back to the original text if the call fails.
     """
-    # Cap input to avoid large token usage; real JDs fit comfortably in 12k chars.
-    truncated = text[:12000]
+    # Real JDs are 3-5k chars; cap input to limit token usage and latency.
+    truncated = text[:6000]
     try:
         resp = deepseek.chat.completions.create(
             model="deepseek-chat",
-            max_tokens=2048,
+            max_tokens=1200,
             messages=[
                 {
                     "role": "system",
@@ -377,7 +378,7 @@ async def _fetch_url_as_plain_text(url: str) -> tuple[str, str]:
         try:
             async with httpx.AsyncClient(
                 follow_redirects=True,
-                timeout=httpx.Timeout(25.0),
+                timeout=httpx.Timeout(10.0),
                 headers=hdr,
                 event_hooks={"request": [_verify_httpx_request_url]},
             ) as client:
@@ -432,7 +433,8 @@ async def _fetch_url_as_plain_text(url: str) -> tuple[str, str]:
             if embedded and len(embedded) > len(text):
                 text = embedded
             # No clean structured source: let LLM isolate the JD from page noise.
-            text = _extract_jd_with_llm(text)
+            # Run in a thread so the sync DeepSeek call doesn't block the event loop.
+            text = await asyncio.to_thread(_extract_jd_with_llm, text)
 
         if len(text) >= 80:
             return text, final_url
@@ -639,7 +641,7 @@ def analyze_resume_standalone(resume_text: str) -> str:
     """Stage 1A — profile the resume independently, no JD context."""
     response = deepseek.chat.completions.create(
         model="deepseek-reasoner",
-        max_tokens=2048,
+        max_tokens=6000,
         messages=[
             {
                 "role": "system",
@@ -710,8 +712,23 @@ def analyze_jd_standalone(job_description: str) -> str:
                     "## Preferred Qualifications\n"
                     "Every 'preferred', 'bonus', or 'nice-to-have' item.\n\n"
                     "## ATS Keyword Master List\n"
-                    "ALL technical terms, tools, frameworks, buzzwords, and domain-specific vocabulary "
-                    "an ATS would scan for. Comma-separated, exhaustive — include every technical term.\n\n"
+                    "List ONLY actionable technical keywords — specific skills, tools, or domain knowledge "
+                    "a recruiter or ATS would search for to filter candidates. "
+                    "INCLUDE: programming languages (Python, Java, C++), libraries/frameworks (NumPy, React, FastAPI), "
+                    "databases (PostgreSQL, Redis), cloud services and APIs (AWS S3, AWS IAM, GCP Vertex AI), "
+                    "developer tools (Docker, Kubernetes, GitHub Actions), domain-specific technologies "
+                    "(Silicon Photonics, Tensor Factorization, Quantum Simulation), "
+                    "and proprietary platforms or named methods from the JD (Databricks, JAX, Boto3). "
+                    "EXCLUDE — these are NOT keywords: degree abbreviations (BS, MS, PhD, B.S., M.S.), "
+                    "generic academic fields (Computer Science, Software Engineering, Physics, Mathematics), "
+                    "seniority/title words (Intern, Engineer, Senior, Junior, PhD Candidate), "
+                    "company and institution names (PsiQuantum, Lockheed Martin, GlobalFoundries, Fortune 500), "
+                    "location names (Palo Alto, CA, San Francisco), "
+                    "and generic English nouns that are not specific tools or technologies "
+                    "(Pipeline, Dashboard, Testing, Automation, Guardrails, Reliability, Validation, "
+                    "Orchestration, Governance, Lineage, Metadata, Monitoring, Onboarding, Authentication, "
+                    "Configuration, SDK, CLI, Jobs, Clusters, Packaging, Cost Visibility). "
+                    "Comma-separated list only.\n\n"
                     "## Responsibilities Summary\n"
                     "3–5 bullets summarising the actual day-to-day work.\n\n"
                     "## Implicit Expectations\n"
@@ -759,18 +776,30 @@ def synthesize_ats_analysis(resume_profile: str, jd_profile: str, resume_text: s
                     "Show your working: "
                     "e.g. 'Baseline 72 → keyword coverage 8/15 (53%) → -8 pts → structural penalties -5 → final 59'.\n\n"
                     "## Keyword Match Analysis\n"
-                    "Use the ATS Keyword Master List from the JD Profile. For EACH keyword, check against "
-                    "the Explicit Skills Inventory and Implicit Skills from the Resume Profile.\n"
+                    "Use the ATS Keyword Master List from the JD Profile. For EACH keyword, apply this "
+                    "three-tier classification using BOTH the Resume Profile AND the raw resume text:\n\n"
+                    "✅ DEMONSTRATED — keyword appears in experience bullets or project descriptions "
+                    "(i.e. the candidate has actually used it in context).\n"
+                    "⚠️ LISTED ONLY — keyword appears in the Skills section but is NOT backed by any "
+                    "experience or project bullet. Listed but never shown in action — passes ATS but "
+                    "raises a flag for human reviewers.\n"
+                    "❌ ABSENT — keyword is not found anywhere in the resume.\n\n"
                     "OUTPUT FORMAT: Each keyword on its own line, exactly as shown:\n"
                     "✅ keyword name: exact quote from resume or brief explanation\n"
-                    "❌ keyword name: brief explanation of why it's missing\n"
-                    "⚠️ keyword name: brief explanation of why it's partial/weakly implied\n\n"
+                    "⚠️ keyword name: brief explanation of why it's partial/weakly implied\n"
+                    "❌ keyword name: brief explanation of why it's missing\n\n"
                     "CRITICAL RULES:\n"
                     "1. ONE keyword per line (never group multiple keywords on one line)\n"
                     "2. Always use format: [emoji] keyword: description\n"
                     "3. Keep descriptions concise (1-2 sentences max)\n"
                     "4. Do NOT use subsections or groupings like 'Present (Explicit/Strongly Implied):'\n"
-                    "5. List all keywords in one continuous stream, sorted by indicator (✅ first, then ⚠️, then ❌)\n\n"
+                    "5. List all keywords in one continuous stream, sorted by indicator (✅ first, then ⚠️, then ❌)\n"
+                    "6. SKIP any keyword that is a degree abbreviation (BS, MS, PhD), a generic job title "
+                    "(Intern, Engineer, Senior), a location (Palo Alto, CA), a company/institution name, "
+                    "or a plain English noun that is not a specific technology or tool "
+                    "(e.g. skip: Pipeline, Dashboard, Testing, Automation, Guardrails, Validation, "
+                    "Orchestration, Reliability, SDK, CLI, Monitoring, Onboarding, Configuration). "
+                    "If a keyword from the list is in this noise category, silently omit it — do not include it at all.\n\n"
                     "## Skills Gap\n"
                     "From Hard Requirements and Preferred Qualifications in the JD Profile, list what is "
                     "absent or weak. Split into:\n"
@@ -1688,3 +1717,27 @@ async def save_resume(
     )
 
     return {"id": resume_id, "filename": resume.filename or "resume.pdf"}
+
+
+@app.post("/api/resumes/{resume_id}/open")
+async def open_saved_resume(
+    resume_id: int,
+    authorization: str | None = Header(default=None),
+):
+    user = get_authenticated_user(authorization)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT extracted_text FROM resumes WHERE id = ? AND user_id = ?",
+            (resume_id, int(user["id"])),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    resume_text = row["extracted_text"]
+    if not resume_text.strip():
+        raise HTTPException(status_code=422, detail="Resume has no extracted text — please re-upload the PDF")
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        f_latex  = executor.submit(generate_latex_body, resume_text)
+        f_struct = executor.submit(extract_structured_data, resume_text)
+        latex_body  = f_latex.result()
+        resume_data = f_struct.result()
+    return {"latexBody": latex_body, "resumeText": resume_text, "resumeData": resume_data}

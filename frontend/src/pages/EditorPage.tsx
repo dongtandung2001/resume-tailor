@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { Box, Typography } from "@mui/material";
-import { compilePdf, applyChanges, reanalyzeResume } from "../api/resumeApi";
+import {
+  Box, Typography, Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, Button, Alert as MuiAlert,
+} from "@mui/material";
+import { compilePdf, applyChanges, reanalyzeResume, saveEditorResume } from "../api/resumeApi";
 import { generateLatexBody } from "../utils/latexGenerator";
 import { parseLatexBody } from "../utils/latexParser";
 import { usePdfPreview } from "../hooks/usePdfPreview";
@@ -16,6 +19,7 @@ interface Props {
   analysis: string;
   initialLatexBody?: string;
   jobDescription?: string;
+  authToken?: string | null;
   onReset: () => void;
 }
 
@@ -25,6 +29,7 @@ export default function EditorPage({
   analysis: initialAnalysis,
   initialLatexBody,
   jobDescription,
+  authToken,
   onReset,
 }: Props) {
   const [activeTab, setActiveTab] = useState(0);
@@ -33,8 +38,15 @@ export default function EditorPage({
     () => initialLatexBody ?? generateLatexBody(initialData),
   );
   const [analysis, setAnalysis] = useState(initialAnalysis);
+  const [localJobDescription, setLocalJobDescription] = useState(jobDescription ?? '');
   const [downloading, setDownloading] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [jdDialogOpen, setJdDialogOpen] = useState(false);
+  const [jdDraft, setJdDraft] = useState('');
   const [reanalyzing, setReanalyzing] = useState(false);
   const [refreshedAnalysis, setRefreshedAnalysis] = useState<string | undefined>(undefined);
   const [error, setError] = useState("");
@@ -130,7 +142,7 @@ export default function EditorPage({
       const { latexBody: improved, pageCount: count } = await applyChanges(
         latexBody,
         analysis,
-        jobDescription,
+        localJobDescription,
       );
       handleAiLatexUpdate(improved);
       setPageCount(count);
@@ -145,7 +157,7 @@ export default function EditorPage({
     setReanalyzing(true);
     setError("");
     try {
-      const { analysis: newAnalysis } = await reanalyzeResume(latexBody, jobDescription ?? "");
+      const { analysis: newAnalysis } = await reanalyzeResume(latexBody, localJobDescription);
       setAnalysis(newAnalysis);
       setRefreshedAnalysis(newAnalysis);
     } catch (err: unknown) {
@@ -173,6 +185,57 @@ export default function EditorPage({
       setError(err instanceof Error ? err.message : "Download failed");
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleOpenSaveDialog = () => {
+    setSaveName('');
+    setSaveError('');
+    setSaveDialogOpen(true);
+  };
+
+  const handleConfirmSave = async () => {
+    const trimmed = saveName.trim();
+    if (!trimmed) {
+      setSaveError('Please enter a name.');
+      return;
+    }
+    if (!authToken) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      await saveEditorResume(latexBody, trimmed, authToken);
+      setSaveDialogOpen(false);
+    } catch (err: unknown) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleOpenJdDialog = () => {
+    setJdDraft(localJobDescription);
+    setJdDialogOpen(true);
+  };
+
+  const handleSaveJd = () => {
+    setLocalJobDescription(jdDraft);
+    setJdDialogOpen(false);
+  };
+
+  const handleSaveAndAnalyzeJd = async () => {
+    setLocalJobDescription(jdDraft);
+    setJdDialogOpen(false);
+    setReanalyzing(true);
+    setError("");
+    try {
+      const { analysis: newAnalysis } = await reanalyzeResume(latexBody, jdDraft);
+      setAnalysis(newAnalysis);
+      setRefreshedAnalysis(newAnalysis);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Re-analysis failed");
+    } finally {
+      setReanalyzing(false);
     }
   };
 
@@ -208,12 +271,17 @@ export default function EditorPage({
         pageCount={pageCount}
         downloading={downloading}
         applying={applying}
+        saving={saving}
         hasAnalysis={!!analysis && !!resumeText}
+        isAuthenticated={!!authToken}
+        jobDescription={localJobDescription}
         error={error}
         onReset={onReset}
         onTabChange={setActiveTab}
         onDownload={handleDownload}
         onApplyChanges={handleApplyChanges}
+        onSave={handleOpenSaveDialog}
+        onOpenJdDialog={handleOpenJdDialog}
       />
 
       <Box
@@ -246,7 +314,7 @@ export default function EditorPage({
               <ResumeEditorPanel
                 data={data}
                 latexBody={latexBody}
-                jobDescription={jobDescription}
+                jobDescription={localJobDescription}
                 onDataChange={setData}
                 onLatexChange={handleLatexChange}
               />
@@ -278,7 +346,7 @@ export default function EditorPage({
               resumeText={resumeText}
               initialAnalysis={initialAnalysis}
               latexBody={latexBody}
-              jobDescription={jobDescription}
+              jobDescription={localJobDescription}
               refreshedAnalysis={refreshedAnalysis}
               reanalyzing={reanalyzing}
               onLatexChange={handleAiLatexUpdate}
@@ -315,6 +383,109 @@ export default function EditorPage({
           />
         </Box>
       </Box>
+
+      <Dialog
+        open={saveDialogOpen}
+        onClose={() => !saving && setSaveDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>
+          Save Resume
+        </DialogTitle>
+        <DialogContent sx={{ pt: '8px !important' }}>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Resume name"
+            value={saveName}
+            onChange={(e) => { setSaveName(e.target.value); setSaveError(''); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmSave(); }}
+            helperText={saveName.trim() ? `Will be saved as "${saveName.trim()}_RESUME"` : 'e.g. AI → AI_RESUME'}
+            disabled={saving}
+            sx={{ mt: 1 }}
+          />
+          {saveError && (
+            <MuiAlert severity="error" sx={{ mt: 1.5, fontSize: '0.8rem', py: 0.5 }}>
+              {saveError}
+            </MuiAlert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setSaveDialogOpen(false)}
+            disabled={saving}
+            sx={{ textTransform: 'none', color: '#6b7280' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSave}
+            disabled={saving || !saveName.trim()}
+            variant="contained"
+            sx={{
+              textTransform: 'none', fontWeight: 600,
+              background: 'linear-gradient(90deg, #059669, #047857)',
+              '&:hover': { background: 'linear-gradient(90deg, #047857, #065f46)' },
+            }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={jdDialogOpen}
+        onClose={() => setJdDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>
+          Job Description
+        </DialogTitle>
+        <DialogContent sx={{ pt: '8px !important' }}>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            rows={10}
+            size="small"
+            label="Job Description"
+            placeholder="Paste the job description here…"
+            value={jdDraft}
+            onChange={(e) => setJdDraft(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setJdDialogOpen(false)}
+            sx={{ textTransform: 'none', color: '#6b7280' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSaveJd}
+            variant="outlined"
+            sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#6b7280', color: '#374151' }}
+          >
+            Save
+          </Button>
+          <Button
+            onClick={handleSaveAndAnalyzeJd}
+            disabled={!jdDraft.trim() || reanalyzing}
+            variant="contained"
+            sx={{
+              textTransform: 'none', fontWeight: 600,
+              background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
+              '&:hover': { background: 'linear-gradient(90deg, #4338ca, #6d28d9)' },
+            }}
+          >
+            {reanalyzing ? 'Analyzing…' : 'Save & Analyze'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
