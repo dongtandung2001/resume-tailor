@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { theme } from './theme';
 import { type View, type ResumeData, type SavedResume, type User } from './types';
-import { analyzeResume, fetchJobDescriptionFromUrl, fetchCurrentUser, fetchSavedResumes, loginUser, logoutUser, registerUser, saveResumeFile, openSavedResume } from './api/resumeApi';
+import { analyzeResume, fetchJobDescriptionFromUrl, fetchCurrentUser, fetchSavedResumes, loginUser, logoutUser, registerUser, openSavedResume } from './api/resumeApi';
 import { nanoid } from './utils/nanoid';
 import { parseLatexBody } from './utils/latexParser';
 import UploadPage from './pages/UploadPage';
@@ -35,6 +35,7 @@ export default function App() {
   const [savedResumes, setSavedResumes] = useState<SavedResume[]>([]);
   const [authLoading, setAuthLoading] = useState(false);
   const [savedResumeId, setSavedResumeId] = useState<number | null>(null);
+  const [openedResumeId, setOpenedResumeId] = useState<number | null>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [jobDescription, setJobDescription] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
@@ -133,6 +134,7 @@ export default function App() {
       setResumeText(data.resumeText ?? '');
       setInitialLatexBody(data.latexBody ?? null);
       setResumeData(normalizeResumeData(data.resumeData ?? {} as ResumeData));
+      setOpenedResumeId(data.savedResumeId ?? null);
       if (authToken) await loadSavedResumes(authToken);
       setView('editor');
     } catch (err: unknown) {
@@ -166,6 +168,7 @@ export default function App() {
     setResumeText('');
     setAnalysis('');
     setInitialLatexBody(null);
+    setOpenedResumeId(null);
     setError('');
   }, []);
 
@@ -207,16 +210,6 @@ export default function App() {
     }
   }, [authToken, persistSession]);
 
-  const handleSaveResume = useCallback(async () => {
-    if (!authToken || !resumeFile) {
-      throw new Error('Please log in and choose a PDF first');
-    }
-    await saveResumeFile(resumeFile, authToken);
-    await loadSavedResumes(authToken);
-    setSavedResumeId(null);
-    setError('');
-  }, [authToken, loadSavedResumes, resumeFile]);
-
   const handleOpenSavedResume = useCallback(async (resumeId: number) => {
     if (!authToken) return;
     setLoading(true);
@@ -225,9 +218,14 @@ export default function App() {
       const data = await openSavedResume(resumeId, authToken);
       setResumeText(data.resumeText ?? '');
       setInitialLatexBody(data.latexBody ?? null);
-      setResumeData(normalizeResumeData(data.resumeData ?? {} as ResumeData));
+      try {
+        setResumeData(normalizeResumeData(parseLatexBody(data.latexBody ?? '')));
+      } catch {
+        setResumeData(normalizeResumeData({} as ResumeData));
+      }
       setAnalysis('');
       setJobDescription('');
+      setOpenedResumeId(data.id ?? null);
       setView('editor');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to open resume');
@@ -254,7 +252,6 @@ export default function App() {
           onLogin={handleLogin}
           onRegister={handleRegister}
           onLogout={handleLogout}
-          onSaveResume={handleSaveResume}
           onOpenSavedResume={handleOpenSavedResume}
           onSavedResumeChange={(id) => {
             setSavedResumeId(id);
@@ -277,6 +274,7 @@ export default function App() {
           initialLatexBody={initialLatexBody ?? undefined}
           jobDescription={jobDescription}
           authToken={authToken}
+          openedResumeId={openedResumeId}
           onReset={handleReset}
         />
       ) : null}

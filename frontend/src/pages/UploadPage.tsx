@@ -29,7 +29,6 @@ interface Props {
   onLogin: (email: string, password: string) => Promise<void>;
   onRegister: (name: string, email: string, password: string) => Promise<void>;
   onLogout: () => Promise<void>;
-  onSaveResume: () => Promise<void>;
   onOpenSavedResume: (resumeId: number) => Promise<void>;
   onSavedResumeChange: (id: number | null) => void;
   onFileChange: (file: File | null) => void;
@@ -46,7 +45,7 @@ export default function UploadPage(props: Props) {
   const {
     currentUser, authLoading, savedResumes, selectedSavedResumeId,
   resumeFile, jobDescription, isDragOver, loading, urlFetchLoading, error,
-    onLogin, onRegister, onLogout, onSaveResume, onOpenSavedResume, onSavedResumeChange,
+    onLogin, onRegister, onLogout, onOpenSavedResume, onSavedResumeChange,
   onFileChange, onDrop, onDragOver, onDragLeave,
     onJobDescriptionChange, onFetchJobFromUrl, onAnalyze, onPasteLatex
   } = props;
@@ -59,8 +58,7 @@ export default function UploadPage(props: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
+
 
   const handleAuthSubmit = async () => {
     setAuthError('');
@@ -76,19 +74,7 @@ export default function UploadPage(props: Props) {
     }
   };
 
-  const handleSaveResume = async () => {
-    setAuthError('');
-    setSaveMessage('');
-    setSaveLoading(true);
-    try {
-      await onSaveResume();
-      setSaveMessage('Resume saved successfully.');
-    } catch (err: unknown) {
-      setAuthError(err instanceof Error ? err.message : 'Failed to save resume');
-    } finally {
-      setSaveLoading(false);
-    }
-  };
+
 
   return (
     <Box sx={{
@@ -285,23 +271,6 @@ export default function UploadPage(props: Props) {
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
               />
-              {currentUser && (
-                <Box mt={2}>
-                  <Button
-                    variant="outlined"
-                    onClick={handleSaveResume}
-                    disabled={saveLoading || !resumeFile}
-                    startIcon={saveLoading ? <CircularProgress size={16} color="inherit" /> : <SavedIcon />}
-                  >
-                    {saveLoading ? 'Saving...' : 'Save Resume'}
-                  </Button>
-                  {saveMessage && (
-                    <Typography variant="caption" color="success.main" display="block" mt={1}>
-                      {saveMessage}
-                    </Typography>
-                  )}
-                </Box>
-              )}
 
               <Typography variant="caption" color="text.secondary">
                 PDF only • Max 5MB

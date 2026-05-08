@@ -200,5 +200,18 @@ export async function openSavedResume(resumeId: number, token: string) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to open resume'));
-  return data as { latexBody: string; resumeText: string; resumeData: ResumeData };
+  return data as { id: number; filename: string; latexBody: string; resumeText: string };
+}
+
+export async function updateSavedResume(resumeId: number, latexBody: string, token: string) {
+  const fd = new FormData();
+  fd.append('latexBody', latexBody);
+  const res = await fetch(`/api/resumes/${resumeId}`, {
+    method: 'PATCH',
+    body: fd,
+    headers: authHeaders(token),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to update resume'));
+  return data as { id: number };
 }

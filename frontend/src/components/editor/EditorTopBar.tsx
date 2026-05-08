@@ -19,8 +19,10 @@ interface Props {
   downloading: boolean;
   applying: boolean;
   saving: boolean;
+  updating: boolean;
   hasAnalysis: boolean;
   isAuthenticated: boolean;
+  openedResumeId?: number | null;
   jobDescription?: string;
   error: string;
   onReset: () => void;
@@ -28,12 +30,14 @@ interface Props {
   onDownload: () => void;
   onApplyChanges: () => void;
   onSave: () => void;
+  onSaveUpdate: () => void;
   onOpenJdDialog: () => void;
 }
 
 export default function EditorTopBar({
-  activeTab, pageCount, downloading, applying, saving, hasAnalysis, isAuthenticated, jobDescription, error,
-  onReset, onTabChange, onDownload, onApplyChanges, onSave, onOpenJdDialog,
+  activeTab, pageCount, downloading, applying, saving, updating, hasAnalysis, isAuthenticated,
+  openedResumeId, jobDescription, error,
+  onReset, onTabChange, onDownload, onApplyChanges, onSave, onSaveUpdate, onOpenJdDialog,
 }: Props) {
   return (
     <Box sx={{
@@ -124,7 +128,31 @@ export default function EditorTopBar({
         </Tooltip>
       )}
 
-      <Tooltip title={isAuthenticated ? 'Save resume to your account' : 'Log in to save resume'}>
+      {openedResumeId && (
+        <Tooltip title="Save changes to this resume">
+          <span>
+            <Button
+              size="small" variant="outlined"
+              onClick={onSaveUpdate} disabled={updating || downloading || applying}
+              startIcon={updating ? <CircularProgress size={13} color="inherit" /> : <SaveIcon sx={{ fontSize: '15px !important' }} />}
+              sx={{
+                px: 1.5, height: 32, fontSize: '0.78rem', borderRadius: 1.5, textTransform: 'none', fontWeight: 600,
+                borderColor: '#0891b2', color: '#0891b2',
+                '&:hover': { bgcolor: '#ecfeff', borderColor: '#0e7490' },
+                '&.Mui-disabled': { borderColor: '#d1d5db', color: '#9ca3af' },
+              }}
+            >
+              {updating ? 'Saving…' : 'Save'}
+            </Button>
+          </span>
+        </Tooltip>
+      )}
+
+      <Tooltip title={
+        !isAuthenticated ? 'Log in to save resume'
+        : openedResumeId ? 'Save as a new resume entry'
+        : 'Save resume to your account'
+      }>
         <span>
           <Button
             size="small" variant="outlined"

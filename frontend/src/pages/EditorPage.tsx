@@ -3,7 +3,7 @@ import {
   Box, Typography, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Button, Alert as MuiAlert,
 } from "@mui/material";
-import { compilePdf, applyChanges, reanalyzeResume, saveEditorResume } from "../api/resumeApi";
+import { compilePdf, applyChanges, reanalyzeResume, saveEditorResume, updateSavedResume } from "../api/resumeApi";
 import { generateLatexBody } from "../utils/latexGenerator";
 import { parseLatexBody } from "../utils/latexParser";
 import { usePdfPreview } from "../hooks/usePdfPreview";
@@ -20,6 +20,7 @@ interface Props {
   initialLatexBody?: string;
   jobDescription?: string;
   authToken?: string | null;
+  openedResumeId?: number | null;
   onReset: () => void;
 }
 
@@ -30,6 +31,7 @@ export default function EditorPage({
   initialLatexBody,
   jobDescription,
   authToken,
+  openedResumeId,
   onReset,
 }: Props) {
   const [activeTab, setActiveTab] = useState(0);
@@ -42,6 +44,7 @@ export default function EditorPage({
   const [downloading, setDownloading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [saveError, setSaveError] = useState('');
@@ -213,6 +216,19 @@ export default function EditorPage({
     }
   };
 
+  const handleSaveUpdate = async () => {
+    if (!authToken || !openedResumeId) return;
+    setUpdating(true);
+    setError("");
+    try {
+      await updateSavedResume(openedResumeId, latexBody, authToken);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleOpenJdDialog = () => {
     setJdDraft(localJobDescription);
     setJdDialogOpen(true);
@@ -272,8 +288,10 @@ export default function EditorPage({
         downloading={downloading}
         applying={applying}
         saving={saving}
+        updating={updating}
         hasAnalysis={!!analysis && !!resumeText}
         isAuthenticated={!!authToken}
+        openedResumeId={openedResumeId}
         jobDescription={localJobDescription}
         error={error}
         onReset={onReset}
@@ -281,6 +299,7 @@ export default function EditorPage({
         onDownload={handleDownload}
         onApplyChanges={handleApplyChanges}
         onSave={handleOpenSaveDialog}
+        onSaveUpdate={handleSaveUpdate}
         onOpenJdDialog={handleOpenJdDialog}
       />
 

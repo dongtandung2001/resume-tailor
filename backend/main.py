@@ -35,7 +35,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:5173")],
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["X-Page-Count"],
 )
@@ -973,6 +973,7 @@ def init_db() -> None:
                 content_type TEXT NOT NULL,
                 pdf_base64 TEXT NOT NULL,
                 extracted_text TEXT NOT NULL DEFAULT '',
+                latex_body TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 UNIQUE(user_id, filename),
@@ -980,6 +981,11 @@ def init_db() -> None:
             );
             """
         )
+        # Migration for existing DBs that predate the latex_body column
+        try:
+            conn.execute("ALTER TABLE resumes ADD COLUMN latex_body TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass  # column already exists
 
 
 def utc_now_iso() -> str:
@@ -1054,6 +1060,7 @@ def upsert_resume_for_user(
     content_type: str,
     pdf_bytes: bytes,
     extracted_text: str,
+    latex_body: str = "",
 ) -> int:
     encoded_pdf = b64encode(pdf_bytes).decode("ascii")
     now = utc_now_iso()
@@ -1066,20 +1073,20 @@ def upsert_resume_for_user(
             cur = conn.execute(
                 """
                 INSERT INTO resumes (
-                    user_id, filename, content_type, pdf_base64, extracted_text, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    user_id, filename, content_type, pdf_base64, extracted_text, latex_body, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (user_id, filename, content_type, encoded_pdf, extracted_text, now, now),
+                (user_id, filename, content_type, encoded_pdf, extracted_text, latex_body, now, now),
             )
             return int(cur.lastrowid)
 
         conn.execute(
             """
             UPDATE resumes
-            SET content_type = ?, pdf_base64 = ?, extracted_text = ?, updated_at = ?
+            SET content_type = ?, pdf_base64 = ?, extracted_text = ?, latex_body = ?, updated_at = ?
             WHERE id = ?
             """,
-            (content_type, encoded_pdf, extracted_text, now, int(existing["id"])),
+            (content_type, encoded_pdf, extracted_text, latex_body, now, int(existing["id"])),
         )
         return int(existing["id"])
 
@@ -1152,6 +1159,7 @@ def store_resume_if_needed(
     resume_content_type: str,
     pdf_bytes: bytes,
     resume_text: str,
+    latex_body: str = "",
 ) -> int | None:
     if current_user is None:
         return None
@@ -1164,6 +1172,7 @@ def store_resume_if_needed(
         content_type=resume_content_type,
         pdf_bytes=pdf_bytes,
         extracted_text=resume_text,
+        latex_body=latex_body,
     )
 
 
@@ -1232,6 +1241,7 @@ async def analyze_resume(
         resume_content_type=resume_content_type,
         pdf_bytes=pdf_bytes,
         resume_text=resume_text,
+        latex_body=latex_body,
     )
 
     return {
@@ -1727,7 +1737,7 @@ async def open_saved_resume(
     user = get_authenticated_user(authorization)
     with get_db() as conn:
         row = conn.execute(
-            "SELECT extracted_text FROM resumes WHERE id = ? AND user_id = ?",
+            "SELECT id, filename, extracted_text, latex_body FROM resumes WHERE id = ? AND user_id = ?",
             (resume_id, int(user["id"])),
         ).fetchone()
     if not row:
@@ -1735,9 +1745,48 @@ async def open_saved_resume(
     resume_text = row["extracted_text"]
     if not resume_text.strip():
         raise HTTPException(status_code=422, detail="Resume has no extracted text — please re-upload the PDF")
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        f_latex  = executor.submit(generate_latex_body, resume_text)
-        f_struct = executor.submit(extract_structured_data, resume_text)
-        latex_body  = f_latex.result()
-        resume_data = f_struct.result()
-    return {"latexBody": latex_body, "resumeText": resume_text, "resumeData": resume_data}
+    stored_latex = (row["latex_body"] or "").strip()
+    if stored_latex:
+        # Fast path: LaTeX already stored, no LLM needed
+        latex_body = stored_latex
+    else:
+        # Fallback for old records that predate latex_body storage
+        latex_body = generate_latex_body(resume_text)
+    return {
+        "id": resume_id,
+        "filename": row["filename"],
+        "latexBody": latex_body,
+        "resumeText": resume_text,
+    }
+
+
+@app.patch("/api/resumes/{resume_id}")
+async def update_saved_resume(
+    resume_id: int,
+    latexBody: str = Form(...),
+    authorization: str | None = Header(default=None),
+):
+    user = get_authenticated_user(authorization)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM resumes WHERE id = ? AND user_id = ?",
+            (resume_id, int(user["id"])),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    latex_source = RESUME_PREAMBLE + "\n" + latexBody
+    pdf_bytes, _, error = try_compile_latex(latex_source)
+    if pdf_bytes is None:
+        raise HTTPException(status_code=422, detail=f"Compilation failed:\n\n{error}")
+
+    extracted_text = extract_text(pdf_bytes)
+    encoded_pdf = b64encode(pdf_bytes).decode("ascii")
+    now = utc_now_iso()
+
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE resumes SET pdf_base64 = ?, extracted_text = ?, latex_body = ?, updated_at = ? WHERE id = ?",
+            (encoded_pdf, extracted_text, latexBody, now, resume_id),
+        )
+    return {"id": resume_id}
